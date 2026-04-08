@@ -1,0 +1,47 @@
+# Docker ignore patterns for RustMUD
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Target directory
+target/
+**/target/
+
+# Cargo lock (for production builds)
+# Cargo.lock
+
+# Documentation
+*.md
+README.md
+LICENSE
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+log/
+
+# Test files
+tests/
+ benches/
+examples/
+
+# Temporary files
+*.tmp
+*.bak
+*.o
+*.so
+
+# txpike9 reference (don't copy to docker image)
+../txpike9/

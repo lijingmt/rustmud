@@ -2,7 +2,7 @@
 // 对应 txpike9/gamenv/single/daemons/http_api/thread_manager.pike
 
 use std::sync::Arc;
-use tokio::sync::{RwLock, Semaphore};
+use tokio::sync::{RwLock, Semaphore, OwnedSemaphorePermit};
 
 /// 线程/任务管理器
 pub struct ThreadManager {
@@ -25,13 +25,13 @@ impl ThreadManager {
 
     /// 获取执行许可 (对应 acquire_thread)
     pub async fn acquire(&self) -> ThreadPermit {
-        // 等待可用线程
-        let permit = self.semaphore.acquire().await.unwrap();
+        // 等待可用线程 - 使用 acquire_owned 获取 owned permit
+        let permit = self.semaphore.clone().acquire_owned().await.unwrap();
         let mut active = self.active_tasks.write().await;
         *active += 1;
 
         ThreadPermit {
-            permit,
+            _permit: Some(permit),
             active_tasks: self.active_tasks.clone(),
         }
     }
@@ -55,7 +55,7 @@ impl Default for ThreadManager {
 
 /// 线程许可 (自动释放)
 pub struct ThreadPermit {
-    permit: tokio::sync::SemaphorePermit<'static>,
+    _permit: Option<OwnedSemaphorePermit>,
     active_tasks: Arc<RwLock<usize>>,
 }
 

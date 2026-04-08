@@ -3,8 +3,9 @@
 
 use crate::core::*;
 use crate::pikenv::config::CONFIG;
-use crate::pikenv::efuns::EFUNSD;
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Master 对象 (对应 master.pike)
 pub struct Master {
@@ -86,7 +87,7 @@ impl Master {
     pub fn connect(&self) -> Result<GObject> {
         // 对应 CHINAQUEST_USER
         let user_path = format!("{}/gamenv/clone/user", CONFIG.root);
-        Ok(GObject::new("guest".to_string(), user_path))
+        Ok(Arc::new(RwLock::new(ObjectInner::new("guest".to_string(), user_path))))
     }
 
     /// 对应 cast_to_program()
@@ -98,7 +99,7 @@ impl Master {
     /// 对应 cast_to_object()
     pub fn cast_to_object(&self, oname: &str) -> Result<GObject> {
         // TODO: 实现对象加载
-        Ok(GObject::new(oname.to_string(), oname.to_string()))
+        Ok(Arc::new(RwLock::new(ObjectInner::new(oname.to_string(), oname.to_string()))))
     }
 
     /// 处理错误 (对应 handle_error())

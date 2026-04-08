@@ -165,7 +165,7 @@ impl AuthManager {
     }
 
     /// 验证 TXD Token
-    pub async fn verify_txd(&mut self, txd: &str) -> Option<AuthData> {
+    pub fn verify_txd(&mut self, txd: &str) -> Option<AuthData> {
         let decoded = self.decode_txd(txd)?;
 
         // TODO: 查询数据库验证用户
@@ -217,7 +217,7 @@ pub async fn handle_auth(
         crate::gamenv::http_api::ApiError::Internal(format!("Auth lock error: {}", e))
     })?;
 
-    match mgr.verify_txd(&txd).await {
+    match mgr.verify_txd(&txd) {
         Some(auth_data) => Ok(serde_json::json!({
             "status": "success",
             "userid": auth_data.userid,

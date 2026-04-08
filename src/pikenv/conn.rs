@@ -1,13 +1,12 @@
 // pikenv/conn.rs - 连接处理
 // 对应 txpike9/pikenv/conn.pike
 
-use crate::core::{GObject, ObjectId, Value, MudError, Result};
+use crate::core::{GObject, ObjectId, Value, MudError, Result, GObjectExt};
 use crate::pikenv::efuns::EfunManager;
 use crate::pikenv::connd::CONND;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use std::sync::Arc;
-use crate::core::object::ObjectInner;
 
 /// 连接状态
 #[derive(Debug, Clone, PartialEq)]
@@ -178,7 +177,7 @@ pub async fn accept_connection(
     // 注册到 CONND
     let user_id = {
         let inner = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(user.inner.read())
+            tokio::runtime::Handle::current().block_on(user.read())
         });
         inner.id
     };

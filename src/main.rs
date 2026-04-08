@@ -12,6 +12,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
         let server = PikenvServer::new();
-        server.run().await
+        match server.run().await {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                eprintln!("Server error: {:?}", e);
+                Err(Box::new(e) as Box<dyn std::error::Error>)
+            }
+        }
     })
 }

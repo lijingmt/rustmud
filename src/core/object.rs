@@ -1,14 +1,11 @@
 // core/object.rs - 对象系统
 // 对应 Pike 的 object 类型，实现 save_object/restore_object
 
-use crate::core::{ObjectId, Value, Mapping, MudError, Result};
+use crate::core::{ObjectId, Value, Mapping, MudError, Result, GObject};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
-use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// 对象基类 (对应 Pike 的 object 类型)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +25,7 @@ impl ObjectInner {
             id: ObjectId::new(),
             name,
             program_path,
-            variables: HashMap::new(),
+            variables: Mapping::new(),
             created: chrono::Utc::now().timestamp(),
             last_modified: chrono::Utc::now().timestamp(),
         }
@@ -63,7 +60,7 @@ impl ObjectInner {
 
     /// 设置变量值
     pub fn set_variable(&mut self, key: &str, value: Value) {
-        self.variables.insert(key.to_string(), value);
+        self.variables.insert(key, value);
         self.last_modified = chrono::Utc::now().timestamp();
     }
 
@@ -75,46 +72,48 @@ impl ObjectInner {
     /// 删除变量
     pub fn delete_variable(&mut self, key: &str) -> Option<Value> {
         self.last_modified = chrono::Utc::now().timestamp();
-        self.variables.remove(key)
+        self.variables.delete(key)
     }
 }
 
-/// 运行时对象 (带 Arc<RwLock> 包装)
-#[derive(Clone)]
-pub struct GObject {
-    inner: Arc<RwLock<ObjectInner>>,
-}
-
-impl GObject {
-    /// 创建新对象
-    pub fn new(name: String, program_path: String) -> Self {
-        Self {
-            inner: Arc::new(RwLock::new(ObjectInner::new(name, program_path))),
-        }
-    }
-
+/// Extension trait for GObject (Arc<RwLock<ObjectInner>>)
+pub trait GObjectExt {
     /// 获取对象 ID
-    pub async fn id(&self) -> ObjectId {
-        self.inner.read().await.id
+    async fn id(&self) -> ObjectId;
+
+    /// 保存对象
+    async fn save_object(&self, path: String) -> Result<()>;
+
+    /// 恢复对象
+    async fn restore_object(&self, path: String) -> Result<()>;
+
+    /// 调用对象方法 (对应 Pike 的 ob->method())
+    async fn call_method(&self, method: &str, args: Vec<Value>) -> Result<Value>;
+}
+
+impl GObjectExt for GObject {
+    /// 获取对象 ID
+    async fn id(&self) -> ObjectId {
+        self.read().await.id
     }
 
     /// 保存对象
-    pub async fn save_object(&self, path: String) -> Result<()> {
-        let inner = self.inner.read().await;
+    async fn save_object(&self, path: String) -> Result<()> {
+        let inner = self.read().await;
         inner.save_object(&path)
     }
 
     /// 恢复对象
-    pub async fn restore_object(&self, path: String) -> Result<()> {
-        let mut inner = self.inner.write().await;
+    async fn restore_object(&self, path: String) -> Result<()> {
+        let mut inner = self.write().await;
         inner.restore_object(&path)
     }
 
     /// 调用对象方法 (对应 Pike 的 ob->method())
-    pub async fn call_method(&self, method: &str, args: Vec<Value>) -> Result<Value> {
+    async fn call_method(&self, method: &str, args: Vec<Value>) -> Result<Value> {
         // 这里会通过程序系统动态调用方法
         // 简化版本：只记录调用
-        tracing::debug!("Calling method {} on object {:?}", method, self.inner.read().await.id);
+        tracing::debug!("Calling method {} on object {:?}", method, self.read().await.id);
         Ok(Value::Void)
     }
 }
@@ -137,13 +136,13 @@ impl ObjectManager {
     pub fn register(&self, obj: GObject) {
         let id = {
             let inner = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(obj.inner.read())
+                tokio::runtime::Handle::current().block_on(obj.read())
             });
             inner.id
         };
         let name = {
             let inner = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(obj.inner.read())
+                tokio::runtime::Handle::current().block_on(obj.read())
             });
             inner.name.clone()
         };
@@ -167,7 +166,7 @@ impl ObjectManager {
         let name = self.objects.get(&id).and_then(|obj| {
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    let inner = obj.inner.read().await;
+                    let inner = obj.read().await;
                     Some(inner.name.clone())
                 })
             })
@@ -198,6 +197,7 @@ impl Default for ObjectManager {
 
 // 对应 Pike 的 destruct()
 pub async fn destruct(obj: &GObject) -> Result<()> {
+    use crate::core::object::GObjectExt;
     // 清理对象资源
     tracing::debug!("Destructing object {:?}", obj.id().await);
     Ok(())

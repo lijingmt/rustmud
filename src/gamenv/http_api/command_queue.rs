@@ -1,19 +1,18 @@
-// gamenv/http_api/command_queue.rs - 命令队列系统
-// 对应 txpike9/gamenv/single/daemons/http_api/command_queue.pike
+// gamenv/http_api/command_queue.rs - Command queue system
+// Corresponds to txpike9/gamenv/single/daemons/http_api/command_queue.pike
 
 use crate::core::*;
 use crate::gamenv::http_api::virtual_conn::VirtualConnection;
 use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{RwLock, oneshot};
+use tokio::sync::oneshot;
 
-/// 命令队列项
+/// Command queue item
 struct CommandItem {
     command: String,
-    response_tx: oneshot::Sender<Result<String, String>>,
+    response_tx: oneshot::Sender<std::result::Result<String, String>>,
 }
 
-/// 用户命令队列
+/// User command queue
 struct UserQueue {
     userid: String,
     pending: Vec<CommandItem>,
@@ -42,13 +41,13 @@ impl CommandQueue {
         }
     }
 
-    /// 入队命令并等待结果 (对应 enqueue_and_wait)
+    /// Enqueue command and wait for result
     pub async fn enqueue_and_wait(
         &mut self,
         userid: String,
         command: String,
         _vconn: VirtualConnection,
-    ) -> Result<String, String> {
+    ) -> std::result::Result<String, String> {
         let (tx, rx) = oneshot::channel();
 
         // 获取或创建用户队列
@@ -108,12 +107,12 @@ impl Default for CommandQueue {
     }
 }
 
-/// 执行单个命令 (内部函数)
+/// Execute single command (internal function)
 pub async fn execute_command_internal(
     userid: String,
     command: String,
     vconn: &VirtualConnection,
-) -> Result<String, String> {
+) -> std::result::Result<String, String> {
     tracing::debug!("Executing command '{}' for user '{}'", command, userid);
 
     // TODO: 通过 efuns 系统执行命令

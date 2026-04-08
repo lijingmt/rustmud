@@ -54,6 +54,7 @@ impl Value {
             Value::Array(a) => a.len(),
             Value::Mapping(m) => m.len(),
             Value::Object(_) => 1,
+            Value::Function(_) => 1,
         }
     }
 
@@ -63,7 +64,7 @@ impl Value {
             Value::Int(i) => fmt.replace("%s", &i.to_string()),
             Value::String(s) => fmt.replace("%s", s),
             Value::Float(f) => fmt.replace("%s", &f.to_string()),
-            _ => fmt,
+            _ => fmt.to_string(),
         }
     }
 }

@@ -2,6 +2,8 @@
 // Corresponds to txpike9's Pike core types
 
 use serde::{Serialize, Deserialize};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 pub mod object;
 pub mod mapping;
@@ -10,18 +12,17 @@ pub mod error;
 pub mod value;
 pub mod program;
 
+// Define GObject type alias first (before re-exports)
+pub type GObject = Arc<RwLock<ObjectInner>>;
+
 // Re-export specific items to avoid conflicts
-pub use object::{ObjectInner, GObject, ObjectManager};
+pub use object::{ObjectInner, ObjectManager, GObjectExt};
 pub use mapping::Mapping;
-pub use array::Array;
-pub use error::{MudError, ErrorHandler, Result};
+pub use error::{MudError, Result};
 pub use value::Value;
 pub use program::{Program, ProgramManager};
 
-use std::sync::Arc;
-use tokio::sync::RwLock;
-
-// 全局对象 ID
+// Global object ID
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ObjectId(pub u64);
 
@@ -33,10 +34,7 @@ impl ObjectId {
     }
 }
 
-// 对象引用类型 (对应 Pike 的 object 类型)
-pub type GObject = Arc<RwLock<ObjectInner>>;
-
-// 对应 Pike 的 backtrace
+// Backtrace structure (corresponds to Pike's backtrace)
 #[derive(Debug, Clone)]
 pub struct Backtrace {
     pub frames: Vec<Frame>,

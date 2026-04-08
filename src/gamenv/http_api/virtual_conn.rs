@@ -76,8 +76,8 @@ impl VirtualConnectionPool {
         }
     }
 
-    /// 获取或创建虚拟连接 (对应 get_virtual_connection)
-    pub async fn get_or_create(&mut self, userid: &str) -> Result<VirtualConnection, String> {
+    /// Get or create virtual connection
+    pub async fn get_or_create(&mut self, userid: &str) -> std::result::Result<VirtualConnection, String> {
         // 清理过期连接
         self.cleanup_expired().await;
 

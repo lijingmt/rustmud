@@ -1,5 +1,5 @@
-// gamenv/http_api/mod.rs - HTTP API 模块
-// 对应 txpike9/gamenv/single/daemons/http_api/
+// gamenv/http_api/mod.rs - HTTP API module
+// Corresponds to txpike9/gamenv/single/daemons/http_api/
 
 pub mod auth;
 pub mod virtual_conn;
@@ -13,9 +13,6 @@ pub use auth::*;
 pub use virtual_conn::*;
 pub use command_queue::*;
 pub use config::*;
-pub use utils::*;
-pub use handlers::*;
-pub use thread_manager::*;
 
 use axum::{
     extract::{State, WebSocketUpgrade, ws::Message},
@@ -27,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-/// HTTP API 状态
+/// HTTP API state
 #[derive(Clone)]
 pub struct HttpApiState {
     pub virtual_conns: Arc<RwLock<VirtualConnectionPool>>,
@@ -35,7 +32,7 @@ pub struct HttpApiState {
     pub config: Arc<HttpApiConfig>,
 }
 
-/// HTTP API 主路由
+/// HTTP API main router
 pub fn create_router() -> Router {
     let state = HttpApiState {
         virtual_conns: Arc::new(RwLock::new(VirtualConnectionPool::new())),
@@ -44,20 +41,20 @@ pub fn create_router() -> Router {
     };
 
     Router::new()
-        // WebSocket 连接
+        // WebSocket connection
         .route("/ws", get(ws_handler))
         // REST API
         .route("/api/command", post(execute_command))
         .route("/api/status", get(get_status))
         .route("/api/user/:userid", get(get_user_info))
-        // 静态文件
+        // Static files
         .route("/static/*path", get(static_files))
-        // 主页
+        // Home page
         .route("/", get(index))
         .with_state(state)
 }
 
-/// WebSocket 处理器 (对应 Pike 的 WebSocket 处理)
+/// WebSocket handler
 pub async fn ws_handler(
     State(state): State<HttpApiState>,
     ws: WebSocketUpgrade,
@@ -65,7 +62,7 @@ pub async fn ws_handler(
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-/// WebSocket 连接处理
+/// WebSocket connection handler
 async fn handle_socket(
     mut socket: axum::extract::ws::WebSocket,
     state: HttpApiState,
@@ -76,7 +73,9 @@ async fn handle_socket(
         match result {
             Ok(msg) => {
                 if let Message::Text(text) = msg {
-                    if let Err(e) = handle_ws_message(text, &state, &mut socket).await {
+                    // Convert Utf8Bytes to String
+                    let text_str = text.to_string();
+                    if let Err(e) = handle_ws_message(text_str, state.clone(), &mut socket).await {
                         tracing::error!("WS message error: {:?}", e);
                     }
                 }
@@ -89,30 +88,31 @@ async fn handle_socket(
     }
 }
 
-/// 处理 WebSocket 消息
+/// Handle WebSocket message
 async fn handle_ws_message(
     msg: String,
-    state: &HttpApiState,
+    state: HttpApiState,
     socket: &mut axum::extract::ws::WebSocket,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // 解析消息格式: {"action":"command","userid":"xxx","cmd":"look"}
+    // Parse message: {"action":"command","userid":"xxx","cmd":"look"}
     let req: WsRequest = serde_json::from_str(&msg)?;
 
     match req.action.as_str() {
         "command" => {
-            // 执行命令
             let result = execute_command_internal(
                 req.userid.unwrap_or_default(),
                 req.cmd.unwrap_or_default(),
-                state,
+                state.clone(),
             ).await?;
 
-            socket.send(Message::Text(serde_json::to_string(&result)?)).await?;
+            // Convert String to Utf8Bytes for Message::Text
+            let json_str = serde_json::to_string(&result)?;
+            socket.send(Message::Text(json_str.into())).await?;
         }
         "auth" => {
-            // 认证
-            let auth_result = handle_auth(req.txd.unwrap_or_default(), state).await?;
-            socket.send(Message::Text(serde_json::to_string(&auth_result)?)).await?;
+            let auth_result = handle_auth(req.txd.unwrap_or_default(), &state).await?;
+            let json_str = serde_json::to_string(&auth_result)?;
+            socket.send(Message::Text(json_str.into())).await?;
         }
         _ => {}
     }
@@ -120,7 +120,7 @@ async fn handle_ws_message(
     Ok(())
 }
 
-/// WebSocket 请求格式
+/// WebSocket request format
 #[derive(Debug, Deserialize)]
 struct WsRequest {
     action: String,
@@ -129,7 +129,7 @@ struct WsRequest {
     txd: Option<String>,
 }
 
-/// WebSocket 响应格式
+/// WebSocket response format
 #[derive(Debug, Serialize)]
 struct WsResponse {
     status: String,
@@ -140,25 +140,27 @@ struct WsResponse {
 /// Execute command API
 pub async fn execute_command(
     State(state): State<HttpApiState>,
-    Json(req): CommandRequest,
+    Json(req): Json<CommandRequest>,
 ) -> Result<Json<CommandResponse>, ApiError> {
     let result = execute_command_internal(req.userid, req.command, state).await?;
     Ok(Json(result))
 }
 
-/// 内部命令执行
+/// Internal command execution
 async fn execute_command_internal(
     userid: String,
     command: String,
     state: HttpApiState,
 ) -> Result<CommandResponse, ApiError> {
-    // 获取或创建虚拟连接
-    let vconn = state.virtual_conns.write().await.get_or_create(&userid).await?;
+    // Get or create virtual connection
+    let vconn = state.virtual_conns.write().await.get_or_create(&userid).await
+        .map_err(|e| ApiError::Internal(e))?;
 
-    // 执行命令 (通过命令队列)
+    // Execute command via command queue
     let output = state.cmd_queue.write().await
         .enqueue_and_wait(userid, command, vconn)
-        .await?;
+        .await
+        .map_err(|e| ApiError::Internal(e))?;
 
     Ok(CommandResponse {
         status: "success".to_string(),
@@ -167,22 +169,22 @@ async fn execute_command_internal(
     })
 }
 
-/// 命令请求
+/// Command request
 #[derive(Debug, Deserialize)]
 pub struct CommandRequest {
-    userid: String,
-    command: String,
+    pub userid: String,
+    pub command: String,
 }
 
-/// 命令响应
+/// Command response
 #[derive(Debug, Serialize)]
 pub struct CommandResponse {
-    status: String,
-    output: String,
-    timestamp: i64,
+    pub status: String,
+    pub output: String,
+    pub timestamp: i64,
 }
 
-/// 获取状态
+/// Get server status
 pub async fn get_status() -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "status": "running",
@@ -191,7 +193,7 @@ pub async fn get_status() -> Json<serde_json::Value> {
     }))
 }
 
-/// API 错误类型
+/// API error type
 #[derive(Debug)]
 pub enum ApiError {
     AuthFailed,
@@ -202,13 +204,13 @@ pub enum ApiError {
 
 impl axum::response::IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        let (status, msg) = match self {
-            ApiError::AuthFailed => (401, "Authentication failed"),
-            ApiError::UserNotFound => (404, "User not found"),
-            ApiError::CommandError => (400, "Command error"),
-            ApiError::Internal(e) => (500, e.as_str()),
+        let (status, msg): (u16, String) = match self {
+            ApiError::AuthFailed => (401, "Authentication failed".to_string()),
+            ApiError::UserNotFound => (404, "User not found".to_string()),
+            ApiError::CommandError => (400, "Command error".to_string()),
+            ApiError::Internal(e) => (500, e.to_string()),
         };
-        (status, msg).into_response()
+        (axum::http::StatusCode::from_u16(status).unwrap(), msg).into_response()
     }
 }
 
@@ -225,22 +227,41 @@ impl std::fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-/// Home page
-pub async fn index() -> Html<&'static str> {
-    Html(include_str!("../web/templates/index.html"))
+impl From<String> for ApiError {
+    fn from(s: String) -> Self {
+        ApiError::Internal(s)
+    }
 }
 
-/// 静态文件处理
-pub async fn static_files(axum::extract::Path(path): axum::extract::Path<String>) -> impl axum::response::IntoResponse {
-    // TODO: 实现静态文件服务
+/// Home page
+pub async fn index() -> Html<&'static str> {
+    Html(r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RustMUD</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>RustMUD - Rust MUD Engine</h1>
+    <p>1:1 Port of txpike9</p>
+    <p>WebSocket: ws://localhost:8080/ws</p>
+</body>
+</html>
+"#)
+}
+
+/// Static files handler
+pub async fn static_files(
+    axum::extract::Path(_path): axum::extract::Path<String>
+) -> impl axum::response::IntoResponse {
     (axum::http::StatusCode::NOT_FOUND, "Not found")
 }
 
-/// 获取用户信息
+/// Get user info
 pub async fn get_user_info(
     axum::extract::Path(userid): axum::extract::Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    // TODO: 实现用户信息查询
     Ok(Json(serde_json::json!({
         "userid": userid,
         "name": "Player"

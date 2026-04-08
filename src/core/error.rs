@@ -37,6 +37,20 @@ pub enum MudError {
     Timeout,
 }
 
+// Implement From for serde_json::Error
+impl From<serde_json::Error> for MudError {
+    fn from(e: serde_json::Error) -> Self {
+        MudError::SerializationError(e.to_string())
+    }
+}
+
+// Implement From for bincode::Error
+impl From<bincode::Error> for MudError {
+    fn from(e: bincode::Error) -> Self {
+        MudError::SerializationError(e.to_string())
+    }
+}
+
 /// 错误处理器 (对应 Pike 的 handle_error)
 pub struct ErrorHandler {
     log_file: Option<String>,

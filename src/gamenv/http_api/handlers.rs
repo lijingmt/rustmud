@@ -27,7 +27,7 @@ pub async fn render_game_page(
         let mut mgr = auth_mgr.lock().map_err(|e| {
             ApiError::Internal(format!("Auth lock error: {}", e))
         })?;
-        mgr.verify_txd(&txd).await.ok_or(ApiError::AuthFailed)?
+        mgr.verify_txd(&txd).ok_or(ApiError::AuthFailed)?
     } else {
         return Err(ApiError::AuthFailed);
     };

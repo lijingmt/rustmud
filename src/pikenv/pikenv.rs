@@ -5,9 +5,10 @@ use crate::core::{MudError, Result};
 use crate::pikenv::config::CONFIG;
 use crate::pikenv::conn::accept_connection;
 use crate::pikenv::gc_manager::GcManager;
-use crate::pikenv::efuns::EFUNSD;
 use tokio::net::TcpListener;
-use tracing::{info, error, warn};
+use tracing::{info, error};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Pikenv 主服务器
 pub struct PikenvServer {
@@ -55,13 +56,16 @@ impl PikenvServer {
                 Ok((stream, addr)) => {
                     info!("New connection from: {}", addr);
 
-                    // 创建用户对象工厂
+                    // User object factory
                     let user_factory = || {
-                        // TODO: 加载用户对象 (对应 master()->connect())
-                        crate::core::GObject::new(
-                            "guest".to_string(),
-                            "/gamenv/clone/user".to_string(),
-                        )
+                        // TODO: Load user object (corresponds to master()->connect())
+                        use tokio::sync::RwLock;
+                        Arc::new(RwLock::new(
+                            crate::core::object::ObjectInner::new(
+                                "guest".to_string(),
+                                "/gamenv/clone/user".to_string(),
+                            )
+                        ))
                     };
 
                     // 处理连接 (对应 CONN(ob, u()))
