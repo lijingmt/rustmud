@@ -5,9 +5,17 @@ edition = "2021"
 authors = ["TXPike9 Team"]
 description = "A Rust MUD engine, 1:1 port of txpike9"
 
+[lib]
+name = "rustmud"
+path = "src/lib.rs"
+
 [[bin]]
-name = "pikenv"
+name = "rustenv"
 path = "src/main.rs"
+
+[[bin]]
+name = "test_game_systems"
+path = "test_game_systems.rs"
 
 [dependencies]
 # 异步运行时 - 对应 Pike 的非阻塞 I/O

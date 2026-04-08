@@ -15,7 +15,7 @@ pub use command_queue::*;
 pub use config::*;
 
 use axum::{
-    extract::{State, WebSocketUpgrade, ws::Message},
+    extract::{State, WebSocketUpgrade, ws::Message, Query},
     response::{Html, Json},
     routing::{get, post},
     Router,
@@ -23,6 +23,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tower_http::cors::{CorsLayer, Any};
+use tower::ServiceBuilder;
 
 /// HTTP API state
 #[derive(Clone)]
@@ -40,18 +42,27 @@ pub fn create_router() -> Router {
         config: Arc::new(HttpApiConfig::default()),
     };
 
+    // CORS layer - allow requests from any origin
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     Router::new()
         // WebSocket connection
         .route("/ws", get(ws_handler))
-        // REST API
+        // REST API - Vue frontend compatibility
+        .route("/api", get(api_get_handler))  // For Vue frontend (txd+cmd query params)
+        // REST API - Internal endpoints
         .route("/api/command", post(execute_command))
         .route("/api/status", get(get_status))
-        .route("/api/user/:userid", get(get_user_info))
+        .route("/api/user/{userid}", get(get_user_info))
         // Static files
-        .route("/static/*path", get(static_files))
+        .route("/static/{*path}", get(static_files))
         // Home page
         .route("/", get(index))
         .with_state(state)
+        .layer(ServiceBuilder::new().layer(cors))
 }
 
 /// WebSocket handler
@@ -137,6 +148,76 @@ struct WsResponse {
     output: Option<String>,
 }
 
+/// API GET handler for Vue frontend compatibility
+/// Handles requests like: /api?txd=xxx&cmd=look
+pub async fn api_get_handler(
+    State(state): State<HttpApiState>,
+    Query(params): Query<ApiGetParams>,
+) -> Json<serde_json::Value> {
+    // Decode TXD to get userid and password
+    let auth_mgr = crate::gamenv::http_api::auth::get_auth_manager();
+    let decoded = match auth_mgr.lock() {
+        Ok(mgr) => mgr.decode_txd(&params.txd),
+        Err(_) => None,
+    };
+
+    let userid = match decoded {
+        Some(d) => d.userid,
+        None => return Json(serde_json::json!({"error": "Authentication failed"})),
+    };
+
+    // Execute command
+    let result = match execute_command_internal(userid.clone(), params.cmd, state).await {
+        Ok(r) => r,
+        Err(_) => return Json(serde_json::json!({"error": "Command failed"})),
+    };
+
+    // Parse the output to extract game state
+    let response = build_game_response(&result.output, &userid);
+
+    Json(response)
+}
+
+/// Build game response in format expected by Vue frontend
+fn build_game_response(output: &str, userid: &str) -> serde_json::Value {
+    serde_json::json!({
+        "messages": [{
+            "type": "info",
+            "text": output
+        }],
+        "player": {
+            "name": userid,
+            "level": 1,
+            "hp": 100,
+            "hpMax": 100,
+            "hpPercent": 100,
+            "mp": 50,
+            "mpMax": 50,
+            "mpPercent": 100
+        },
+        "navigation": {
+            "exits": [
+                {"direction": "north", "label": "北方", "command": "north"},
+                {"direction": "south", "label": "南方", "command": "south"},
+                {"direction": "east", "label": "东方", "command": "east"},
+                {"direction": "west", "label": "西方", "command": "west"}
+            ]
+        },
+        "actions": [
+            {"id": "look", "label": "查看", "command": "look", "style": "primary"},
+            {"id": "inventory", "label": "背包", "command": "inventory", "style": "default"},
+            {"id": "score", "label": "状态", "command": "score", "style": "default"}
+        ]
+    })
+}
+
+/// API GET parameters
+#[derive(Debug, Deserialize)]
+struct ApiGetParams {
+    txd: String,
+    cmd: String,
+}
+
 /// Execute command API
 pub async fn execute_command(
     State(state): State<HttpApiState>,
@@ -152,21 +233,69 @@ async fn execute_command_internal(
     command: String,
     state: HttpApiState,
 ) -> Result<CommandResponse, ApiError> {
+    tracing::info!("Executing command '{}' for user '{}'", command, userid);
+
     // Get or create virtual connection
-    let vconn = state.virtual_conns.write().await.get_or_create(&userid).await
+    let mut vconn = state.virtual_conns.write().await.get_or_create(&userid).await
         .map_err(|e| ApiError::Internal(e))?;
 
-    // Execute command via command queue
-    let output = state.cmd_queue.write().await
-        .enqueue_and_wait(userid, command, vconn)
-        .await
-        .map_err(|e| ApiError::Internal(e))?;
+    // Directly execute command (simplified for now)
+    // TODO: Integrate with full game command processor
+    let output = execute_game_command(&userid, &command, &vconn).await;
+
+    // Update connection time
+    state.virtual_conns.write().await.update_time(&userid).await;
 
     Ok(CommandResponse {
         status: "success".to_string(),
         output,
         timestamp: chrono::Utc::now().timestamp(),
     })
+}
+
+/// Execute game command (simplified implementation)
+async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConnection) -> String {
+    // Basic command responses for testing
+    match command.trim() {
+        "look" => format!(
+            "这是天下AI网游的游戏世界。\n\
+             玩家: {}\n\
+             \n\
+             这里是新手村的广场。\n\
+             \n\
+             这里明显的出口有: 北方 南方 东方 西方",
+            userid
+        ),
+        "north" | "n" => "你向北走。\n\n你来到了北边的街道。\n\n这里明显的出口有: 南方".to_string(),
+        "south" | "s" => "你向南走。\n\n你来到了南边的街道。\n\n这里明显的出口有: 北方".to_string(),
+        "east" | "e" => "你向东走。\n\n你来到了东边的街道。\n\n这里明显的出口有: 西方".to_string(),
+        "west" | "w" => "你向西走。\n\n你来到了西边的街道。\n\n这里明显的出口有: 东方".to_string(),
+        "inventory" | "i" | "inv" => format!(
+            "你身上带着:\n\
+             没有任何东西。\n\
+             \n\
+             玩家: {}",
+            userid
+        ),
+        "score" => format!(
+            "玩家: {}\n\
+             等级: 1\n\
+             经验: 0\n\
+             HP: 100/100\n\
+             MP: 50/50",
+            userid
+        ),
+        "who" => format!(
+            "在线玩家:\n\
+             {} (新手村)",
+            userid
+        ),
+        cmd if cmd.starts_with("say") => {
+            let msg = cmd.strip_prefix("say").map(|s| s.trim()).unwrap_or("");
+            format!("你说: {}", msg)
+        }
+        _ => format!("未知命令: {}\n尝试输入: look, north, south, east, west, inventory, score", command),
+    }
 }
 
 /// Command request

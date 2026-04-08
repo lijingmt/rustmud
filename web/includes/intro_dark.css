@@ -1,0 +1,158 @@
+html, body {
+	font: Normal 18px "Noto Sans SC Medium";
+	background: rgb(9, 9, 9) !important;
+	color: #A6A6A6;
+	height: 100vh;
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+/* 确保所有div元素也是黑色背景 */
+div {
+	background: rgb(9, 9, 9);
+	color: #A6A6A6;
+}
+
+@media (min-width: 2000px) {
+	div {
+		margin: 0 auto;
+		width: 415px;
+	}
+}
+
+a {
+	text-decoration: none;
+	margin: 1px auto;
+	color: #A6A6A6;
+}
+
+a:hover {
+	color: #CCCCCC;
+}
+
+input {
+	font-size: 18px;
+	outline: none;
+	border: 1px solid #555555;
+	background-color: #2a2a2a;
+	color: #A6A6A6;
+}
+
+textarea {
+	background-color: #2a2a2a;
+	color: #A6A6A6;
+	border: 1px solid #555555;
+}
+
+.parent {
+	border: 0px solid red;
+	height: calc(100vh - 60px);
+	text-align: center;
+	color: #A6A6A6;
+	background: rgb(9, 9, 9);
+	overflow-y: auto;
+	overflow-x: hidden;
+	/* 平滑滚动 */
+	scroll-behavior: smooth;
+	/* iOS平滑滚动 */
+	-webkit-overflow-scrolling: touch;
+	/* 底部内边距，确保内容不被翻译区域挡住 */
+	padding-bottom: 20px;
+}
+
+/* 优化滚动条样式（仅支持WebKit浏览器） - 暗色主题 */
+.parent::-webkit-scrollbar {
+	width: 8px;
+}
+
+.parent::-webkit-scrollbar-track {
+	background: #1a1a1a;
+}
+
+.parent::-webkit-scrollbar-thumb {
+	background: #444;
+	border-radius: 4px;
+}
+
+.parent::-webkit-scrollbar-thumb:hover {
+	background: #666;
+}
+
+.child {
+	border: 0px solid green;
+	display: inline-block;
+	width: 300px;
+	text-align: left;
+	vertical-align: top;
+	background: rgb(9, 9, 9);
+}
+
+.parent:before{
+  content:'';
+  outline: 0px solid red;
+  display: inline-block;
+  height: 100%;
+  vertical-align: top;
+}
+.parent:after{
+  content:'';
+  outline: 0px solid red;
+  display: inline-block;
+  height: 100%;
+  vertical-align: top;
+}
+
+/* 翻译区域容器 - 固定在底部 */
+#translate,
+.translate-center,
+.translate-wrapper {
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: 60px !important;
+  background: rgb(9, 9, 9) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-top: 1px solid #333 !important;
+  z-index: 9999 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* 翻译选择器样式 */
+.translateSelectLanguage,
+#translateSelectLanguage {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  margin: 0 auto !important;
+  display: inline-block !important;
+}
+
+/* Rainbow button style - 伏羲彩虹按钮效果（暗色模式） */
+.btn-outline-rainbow {
+  background: transparent;
+  color: #ff00ff;
+  border: 2px solid;
+  border-image: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3) 1;
+  animation: rainbow-glow-dark 2s ease-in-out infinite;
+}
+
+.btn-outline-rainbow:hover {
+  text-shadow: 0 0 15px #ff00ff, 0 0 8px #ff0000;
+}
+
+@keyframes rainbow-glow-dark {
+  0% { text-shadow: 0 0 8px #ff0000, 0 0 4px rgba(255, 0, 0, 0.5); }
+  16% { text-shadow: 0 0 8px #ff7f00, 0 0 4px rgba(255, 127, 0, 0.5); }
+  33% { text-shadow: 0 0 8px #ffff00, 0 0 4px rgba(255, 255, 0, 0.5); }
+  50% { text-shadow: 0 0 8px #00ff00, 0 0 4px rgba(0, 255, 0, 0.5); }
+  66% { text-shadow: 0 0 8px #0000ff, 0 0 4px rgba(0, 0, 255, 0.5); }
+  83% { text-shadow: 0 0 8px #9400d3, 0 0 4px rgba(148, 0, 211, 0.5); }
+  100% { text-shadow: 0 0 8px #ff0000, 0 0 4px rgba(255, 0, 0, 0.5); }
+}

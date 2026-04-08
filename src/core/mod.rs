@@ -34,6 +34,12 @@ impl ObjectId {
     }
 }
 
+impl std::fmt::Display for ObjectId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 // Backtrace structure (corresponds to Pike's backtrace)
 #[derive(Debug, Clone)]
 pub struct Backtrace {

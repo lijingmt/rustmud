@@ -2,7 +2,7 @@
 // 对应 txpike9/gamenv/cmds/ 目录
 
 use crate::core::*;
-use crate::pikenv::efuns::EFUNSD;
+use crate::rustenv::efuns::EFUNSD;
 use async_trait::async_trait;
 
 /// 命令 Trait

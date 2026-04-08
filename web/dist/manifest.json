@@ -1,0 +1,16 @@
+{
+  "name": "天下AI网游",
+  "short_name": "TXPike9",
+  "version": "v1769220174286",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#667eea",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

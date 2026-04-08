@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee
+                       https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+   version="6.0">
+
+    <description>天下原版网游 - 前端应用</description>
+    <display-name>txpike9 Web Application</display-name>
+
+    <!-- JSP 配置 - 启用 JSP 3.1 特性 -->
+    <jsp-config>
+        <jsp-property-group>
+            <description>JSP 3.1 配置</description>
+            <url-pattern>*.jsp</url-pattern>
+            <url-pattern>*.jspx</url-pattern>
+            <!-- 启用表达式语言（EL） -->
+            <el-enabled>true</el-enabled>
+            <!-- 启用脚本编写 -->
+            <scripting-enabled>true</scripting-enabled>
+        </jsp-property-group>
+    </jsp-config>
+
+    <!-- 会话配置 -->
+    <session-config>
+        <cookie-config>
+            <secure>false</secure>
+            <http-only>true</http-only>
+        </cookie-config>
+        <tracking-mode>COOKIE</tracking-mode>
+    </session-config>
+
+    <!-- 欢迎文件配置 -->
+    <welcome-file-list>
+        <welcome-file>index.html</welcome-file>
+        <welcome-file>index.jsp</welcome-file>
+        <welcome-file>index.htm</welcome-file>
+    </welcome-file-list>
+
+    <!-- 安全约束 - 支持 HTTPS -->
+    <security-constraint>
+        <web-resource-collection>
+            <web-resource-name>Entire Application</web-resource-name>
+            <url-pattern>/*</url-pattern>
+        </web-resource-collection>
+        <user-data-constraint>
+            <transport-guarantee>NONE</transport-guarantee>
+        </user-data-constraint>
+    </security-constraint>
+
+</web-app>

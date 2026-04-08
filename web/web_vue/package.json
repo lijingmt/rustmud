@@ -1,0 +1,17 @@
+{
+  "name": "txpike9-vue",
+  "version": "1.0.0",
+  "description": "Vue前端 for TXPike9 MUD",
+  "scripts": {
+    "dev": "node serve.js",
+    "build": "node build.js",
+    "build:prod": "node build.js",
+    "clean": "rm -rf dist ../web/web_vue"
+  },
+  "dependencies": {
+    "vue": "^3.4.0"
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

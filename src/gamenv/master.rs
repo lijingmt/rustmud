@@ -2,7 +2,7 @@
 // 对应 txpike9/gamenv/master.pike
 
 use crate::core::*;
-use crate::pikenv::config::CONFIG;
+use crate::rustenv::config::CONFIG;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

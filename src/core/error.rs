@@ -9,11 +9,17 @@ pub enum MudError {
     #[error("Object not found: {0}")]
     ObjectNotFound(String),
 
-    #[error("Program compile error: {0}")]
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Compile error: {0}")]
     CompileError(String),
 
     #[error("Runtime error: {0}")]
     RuntimeError(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 
     #[error("Database error: {0}")]
     DatabaseError(#[from] sqlx::Error),

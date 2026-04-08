@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天下AI网游 - Vue版</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 登录弹窗 -->
+        <div class="modal-overlay" v-if="showLogin">
+            <div class="modal">
+                <h2>账号登录</h2>
+                <div class="form-group">
+                    <label>账号</label>
+                    <input type="text" v-model="loginForm.userid" placeholder="输入账号">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" v-model="loginForm.password" placeholder="输入密码">
+                </div>
+                <button class="btn btn-primary btn-block" @click="doLogin">
+                    {{ isLoggingIn ? '登录中...' : '登录' }}
+                </button>
+                <div v-if="loginError" class="message message-error" style="margin-top:15px">
+                    {{ loginError }}
+                </div>
+            </div>
+        </div>
+
+        <!-- 顶部状态栏 -->
+        <header class="game-header" v-if="!showLogin">
+            <div class="player-info">
+                <div class="player-main">
+                    <div class="player-name">{{ state.player?.name || '加载中...' }}</div>
+                    <div class="player-level">Lv.{{ state.player?.level || 0 }}</div>
+                </div>
+            </div>
+
+            <div class="status-bars" v-if="state.player">
+                <div class="status-bar">
+                    <div class="bar-label">HP</div>
+                    <div class="bar-track">
+                        <div class="bar-fill hp-bar" :style="{width: (state.player.hpPercent || 0) + '%'}"></div>
+                    </div>
+                    <div class="bar-value">{{ state.player.hp || 0 }}/{{ state.player.hpMax || 0 }}</div>
+                </div>
+                <div class="status-bar">
+                    <div class="bar-label">MP</div>
+                    <div class="bar-track">
+                        <div class="bar-fill mp-bar" :style="{width: (state.player.mpPercent || 0) + '%'}"></div>
+                    </div>
+                    <div class="bar-value">{{ state.player.mp || 0 }}/{{ state.player.mpMax || 0 }}</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="game-content" ref="messageContainer" v-if="!showLogin">
+            <div v-for="msg in state.messages" :key="msg.id"
+                 :class="['message', 'message-' + msg.type]">
+                <span class="message-text">{{ msg.text }}</span>
+            </div>
+        </main>
+
+        <!-- 操作按钮区 -->
+        <section class="game-actions" v-if="!showLogin && state.actions?.length">
+            <button v-for="action in state.actions" :key="action.id"
+                    class="btn btn-action"
+                    :class="'btn-' + (action.style || 'default')"
+                    @click="sendCommand(action.command)">
+                {{ action.label }}
+            </button>
+        </section>
+
+        <!-- 方向导航 -->
+        <nav class="game-navigation" v-if="!showLogin && state.navigation?.exits">
+            <button v-for="exit in state.navigation.exits" :key="exit.direction"
+                    class="nav-btn" @click="sendCommand(exit.command)">
+                <span class="nav-icon">{{ getNavIcon(exit.label) }}</span>
+                <span class="nav-label">{{ exit.label }}</span>
+            </button>
+        </nav>
+
+        <!-- 命令输入区 -->
+        <footer class="game-input" v-if="!showLogin">
+            <input type="text" class="cmd-input" v-model="inputCommand"
+                   @keyup.enter="sendCommand(inputCommand)"
+                   placeholder="输入命令..." :disabled="isLoading"
+                   ref="cmdInput">
+            <button class="send-btn" @click="sendCommand(inputCommand)" :disabled="isLoading">
+                发送
+            </button>
+        </footer>
+
+        <!-- 连接状态 -->
+        <div class="connection-status" :class="{connected: !showLogin, disconnected: showLogin}">
+            <span class="status-dot"></span>
+            {{ connectionStatus }}
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="js/app.js?v=20260408-2"></script>
+</body>
+</html>

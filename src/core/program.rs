@@ -25,7 +25,7 @@ impl ProgramManager {
         Self {
             programs: HashMap::new(),
             search_paths: vec![
-                "/pikenv/".to_string(),
+                "/rustenv/".to_string(),
                 "/gamenv/".to_string(),
                 "/gamenv/cmds/".to_string(),
                 "/gamenv/single/daemons/".to_string(),

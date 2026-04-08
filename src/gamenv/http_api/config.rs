@@ -19,8 +19,8 @@ pub struct HttpApiConfig {
 impl Default for HttpApiConfig {
     fn default() -> Self {
         Self {
-            http_port: 8080,
-            ws_port: 8080,
+            http_port: 8081,  // Changed from 8080 to avoid conflict with Tomcat
+            ws_port: 8081,    // Changed from 8080 to avoid conflict with Tomcat
             command_hide_enabled: true,
             rate_limit: 100, // 每分钟100个请求
             connection_timeout: 1800, // 30分钟
@@ -34,11 +34,11 @@ impl HttpApiConfig {
             http_port: std::env::var("HTTP_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(8080),
+                .unwrap_or(8081),
             ws_port: std::env::var("WS_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(8080),
+                .unwrap_or(8081),
             ..Default::default()
         }
     }
