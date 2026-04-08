@@ -1,8 +1,9 @@
-// gamenv/clone.rs - 可克隆对象
-// 对应 txpike9/gamenv/clone/ 目录
+// gamenv/clone.rs - Cloneable objects
+// Corresponds to txpike9/gamenv/clone/ directory
 
-pub mod user;
-pub mod item;
-pub mod npc;
+// User module is at gamenv/user.rs
+pub use crate::gamenv::user::User;
 
-pub use user::User;
+// TODO: Implement item and npc modules
+// pub mod item;
+// pub mod npc;

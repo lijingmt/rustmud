@@ -1,5 +1,5 @@
-// gamenv/mod.rs - 游戏环境模块
-// 对应 txpike9/gamenv/ 目录
+// gamenv/mod.rs - Game environment module
+// Corresponds to txpike9/gamenv/ directory
 
 pub mod master;
 pub mod user;
@@ -9,6 +9,7 @@ pub mod inherit;
 pub mod d;
 pub mod clone;
 pub mod data;
+pub mod http_api;
 
 pub use master::*;
 pub use user::*;

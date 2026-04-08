@@ -1,5 +1,5 @@
-// core/mod.rs - 核心类型系统
-// 对应 txpike9 的 Pike 核心类型
+// core/mod.rs - Core type system
+// Corresponds to txpike9's Pike core types
 
 use serde::{Serialize, Deserialize};
 
@@ -10,12 +10,13 @@ pub mod error;
 pub mod value;
 pub mod program;
 
-pub use object::*;
-pub use mapping::*;
-pub use array::*;
-pub use error::*;
-pub use value::*;
-pub use program::*;
+// Re-export specific items to avoid conflicts
+pub use object::{ObjectInner, GObject, ObjectManager};
+pub use mapping::Mapping;
+pub use array::Array;
+pub use error::{MudError, ErrorHandler, Result};
+pub use value::Value;
+pub use program::{Program, ProgramManager};
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
