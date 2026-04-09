@@ -211,6 +211,7 @@ createApp({
         },
         // 解析 MUD 行为可渲染的格式 - 直接使用 mudLines
         parsedMudLines() {
+            console.log('[parsedMudLines] called, mudLines:', this.mudLines?.length, 'mudLines[0]:', this.mudLines?.[0]);
             const lines = [];
 
             // 优先使用 mudLines（这个总是在命令执行后更新）
@@ -265,33 +266,6 @@ createApp({
 
             console.log('[parsedMudLines] lines count:', lines.length);
             return lines;
-        },
-
-        // 获取按钮样式
-        getButtonStyle(text) {
-            if (text.includes('北') || text.includes('南') ||
-                text.includes('东') || text.includes('西') ||
-                text.includes('上') || text.includes('下')) {
-                return 'btn-outline-success';
-            }
-            if (text.includes('商城') || text.includes('拍卖') || text.includes('杀戮')) {
-                return 'btn-outline-warning';
-            }
-            if (text.includes('吃药')) {
-                return 'btn-outline-purple';
-            }
-            return 'btn-outline-info';
-        },
-
-        // 获取按钮命令
-        getButtonCommand(text) {
-            if (text.includes('北')) return 'go north';
-            if (text.includes('南')) return 'go south';
-            if (text.includes('东')) return 'go east';
-            if (text.includes('西')) return 'go west';
-            if (text.includes('上')) return 'go up';
-            if (text.includes('下')) return 'go down';
-            return text;
         }
     },
 
@@ -331,6 +305,35 @@ createApp({
             if (label.includes('上')) return '↑';
             if (label.includes('下')) return '↓';
             return '→';
+        },
+
+        // 获取按钮样式
+        getButtonStyle(text) {
+            if (!text) return 'btn-outline-info';
+            if (text.includes('北') || text.includes('南') ||
+                text.includes('东') || text.includes('西') ||
+                text.includes('上') || text.includes('下')) {
+                return 'btn-outline-success';
+            }
+            if (text.includes('商城') || text.includes('拍卖') || text.includes('杀戮')) {
+                return 'btn-outline-warning';
+            }
+            if (text.includes('吃药')) {
+                return 'btn-outline-purple';
+            }
+            return 'btn-outline-info';
+        },
+
+        // 获取按钮命令
+        getButtonCommand(text) {
+            if (!text) return '';
+            if (text.includes('北')) return 'go north';
+            if (text.includes('南')) return 'go south';
+            if (text.includes('东')) return 'go east';
+            if (text.includes('西')) return 'go west';
+            if (text.includes('上')) return 'go up';
+            if (text.includes('下')) return 'go down';
+            return text;
         },
 
         // 渲染带颜色代码的文本
@@ -1239,6 +1242,8 @@ createApp({
                 }
                 // 更新MUD输出
                 this.mudLines = data.lines || [];
+                console.log('[Login] mudLines updated, count:', this.mudLines.length);
+                console.log('[Login] mudLines[0]:', this.mudLines[0]);
 
                 // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
                 if (data.state) {
