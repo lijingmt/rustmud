@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use super::utils::{TextPart, parse_color_codes_to_parts};
 
 /// MUD 输出行（Vue 前端格式）
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,16 +50,6 @@ pub enum SegmentType {
     #[serde(rename = "url-link")]
     UrlLink,
     Image,
-}
-
-/// 文本部分（用于颜色等样式）
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TextPart {
-    pub text: String,
-    pub color: Option<String>,
-    pub bold: Option<bool>,
-    pub underline: Option<bool>,
-    pub link: Option<String>,
 }
 
 /// MUD 输出解析器
@@ -303,10 +294,9 @@ impl MudOutputParser {
         }
 
         // 检测出口文本模式: "明显的出口: 东方 南方 西方" 等
-        let clean_line = line.replace("§H", "").replace("§N", "").replace("§Y", "").replace("§R", "");
-        if clean_line.contains("明显的出口:") || clean_line.contains("出口:") {
+        if line.contains("明显的出口:") || line.contains("出口:") {
             // 先添加文本部分（"明显的出口:" 或 "出口:"）
-            let prefix = if clean_line.contains("明显的出口:") {
+            let prefix = if line.contains("明显的出口:") {
                 "明显的出口: "
             } else {
                 "出口: "
@@ -340,7 +330,7 @@ impl MudOutputParser {
             ];
 
             for (dir_cn, dir_en, arrow) in directions {
-                if clean_line.contains(dir_cn) {
+                if line.contains(dir_cn) {
                     segments.push(MudSegment {
                         r#type: SegmentType::Button,
                         label: Some(format!("{}{}", arrow, dir_cn)),
@@ -374,17 +364,12 @@ impl MudOutputParser {
             }
         }
 
-        // 默认：纯文本
+        // 默认：纯文本（解析颜色代码）
+        let parts = parse_color_codes_to_parts(line);
         segments.push(MudSegment {
             r#type: SegmentType::Text,
             text: Some(line.to_string()),
-            parts: Some(vec![TextPart {
-                text: line.to_string(),
-                color: None,
-                bold: None,
-                underline: None,
-                link: None,
-            }]),
+            parts: Some(parts),
             ..Default::default()
         });
 

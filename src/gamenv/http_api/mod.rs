@@ -17,6 +17,7 @@ pub use command_queue::*;
 pub use config::*;
 pub use mud_output::*;
 pub use commands::*;
+pub use utils::{TextPart, parse_color_codes, parse_color_codes_to_parts};
 
 use axum::{
     extract::{State, WebSocketUpgrade, ws::Message, Query},

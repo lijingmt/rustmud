@@ -293,65 +293,35 @@ createApp({
                                 command: cmd
                             });
                         }
-                        // 文本类型 - 检查 parts 数组
+                        // 文本类型 - 检查 parts 数组（带颜色）
                         else if (seg.type === 'text' && seg.parts && seg.parts.length > 0) {
-                            // 合并所有 parts 的文本
-                            let fullText = '';
+                            // 保留每个 part 的颜色信息
                             for (const part of seg.parts) {
                                 if (part.text) {
-                                    fullText += part.text;
+                                    // 移除 § 颜色代码（后端已解析到 color 属性）
+                                    const cleanText = part.text.replace(/§[A-Za-z0-9]/g, '').replace(/\\n/g, '\n');
+                                    if (cleanText.trim()) {
+                                        segments.push({
+                                            text: cleanText,
+                                            isButton: false,
+                                            color: part.color || null,
+                                            bold: part.bold || false
+                                        });
+                                    }
                                 }
-                            }
-                            // 移除颜色代码
-                            const cleanText = fullText.replace(/§[A-Z]/g, '').replace(/\\n/g, '\n');
-                            if (cleanText.trim()) {
-                                segments.push({
-                                    text: cleanText,
-                                    isButton: false
-                                });
                             }
                         }
                         // 其他类型 - 直接使用 text 属性
                         else if (seg.text) {
-                            const cleanText = seg.text.replace(/§[A-Z]/g, '').replace(/\\n/g, '\n');
+                            // 移除颜色代码
+                            const cleanText = seg.text.replace(/§[A-Za-z0-9]/g, '').replace(/\\n/g, '\n');
                             if (cleanText.trim()) {
-                                // 检查是否包含出口信息，如果是，添加方向按钮
-                                if (cleanText.includes('明显的出口:') || cleanText.includes('出口:')) {
-                                    // 先添加文本部分
-                                    segments.push({
-                                        text: cleanText,
-                                        isButton: false
-                                    });
-
-                                    // 提取方向并创建按钮
-                                    const directions = [];
-                                    // 匹配：西方、南方、东方、北方、上方、下方
-                                    const dirMatches = cleanText.match(/(西方|南方|东方|北方|上方|下方)/g);
-                                    if (dirMatches) {
-                                        for (const dir of dirMatches) {
-                                            const dirCmd = {
-                                                '西方': 'west',
-                                                '南方': 'south',
-                                                '东方': 'east',
-                                                '北方': 'north',
-                                                '上方': 'up',
-                                                '下方': 'down'
-                                            }[dir];
-                                            const icon = {'西方': '←', '南方': '↓', '东方': '→', '北方': '↑', '上方': '↑', '下方': '↓'}[dir];
-                                            segments.push({
-                                                text: `${icon}${dir}`,
-                                                isButton: true,
-                                                buttonClass: 'btn-outline-success',
-                                                command: dirCmd
-                                            });
-                                        }
-                                    }
-                                } else {
-                                    segments.push({
-                                        text: cleanText,
-                                        isButton: false
-                                    });
-                                }
+                                segments.push({
+                                    text: cleanText,
+                                    isButton: false,
+                                    color: null,
+                                    bold: false
+                                });
                             }
                         }
                     }
