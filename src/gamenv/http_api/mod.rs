@@ -705,9 +705,20 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
                 "你要和谁PK？".to_string()
             } else {
                 let target = args.join(" ");
-                let world_guard = world_arc.read().await;
-                pk_command(&world_guard, &player_room, &target).await
+                // 检查是否是 "pk continue" 命令
+                if target == "continue" {
+                    pk_continue_command(userid).await
+                } else {
+                    let world_guard = world_arc.read().await;
+                    pk_command(&world_guard, &player_room, userid, &target).await
+                }
             }
+        }
+        "escape" => {
+            escape_command(userid).await
+        }
+        "surrender" => {
+            surrender_command(userid).await
         }
         cmd if cmd.starts_with("say") => {
             let msg = args.join(" ");
@@ -998,6 +1009,7 @@ async fn kill_command(
 async fn pk_command(
     world: &crate::gamenv::world::GameWorld,
     room_id: &str,
+    userid: &str,
     target: &str,
 ) -> String {
     if let Some(room) = world.get_room(room_id) {
@@ -1019,7 +1031,7 @@ async fn pk_command(
             }
         }
 
-        // 检查怪物
+        // 检查怪物 - 使用战斗系统
         for monster_id in &room.monsters {
             if let Some(monster) = world.get_npc(monster_id) {
                 if monster.id.contains(target) || monster.name.contains(target) || monster.short.contains(target) {
@@ -1031,8 +1043,126 @@ async fn pk_command(
                 }
             }
         }
+
+        // 尝试玩家PK（使用PK守护进程）
+        use crate::gamenv::single::daemons::pkd::{PKD, PkMode, CombatStats};
+
+        // 构建挑战者数据
+        let challenger_stats = CombatStats {
+            id: userid.to_string(),
+            name: userid.to_string(),
+            name_cn: userid.to_string(),
+            level: 1,
+            hp: 100,
+            hp_max: 100,
+            mp: 50,
+            mp_max: 50,
+            jing: 100,
+            jing_max: 100,
+            qi: 50,
+            qi_max: 50,
+            attack: 10,
+            defense: 5,
+            dodge: 8,
+            parry: 6,
+            pk_mode: PkMode::Free,
+            pk_value: 0,
+            kill_streak: 0,
+            is_killing: false,
+        };
+
+        // 构建防守者数据（从当前房间查找玩家）
+        // TODO: 从房间获取其他玩家数据
+        let defender_stats = CombatStats {
+            id: target.to_string(),
+            name: target.to_string(),
+            name_cn: target.to_string(),
+            level: 1,
+            hp: 100,
+            hp_max: 100,
+            mp: 50,
+            mp_max: 50,
+            jing: 100,
+            jing_max: 100,
+            qi: 50,
+            qi_max: 50,
+            attack: 10,
+            defense: 5,
+            dodge: 8,
+            parry: 6,
+            pk_mode: PkMode::Free,
+            pk_value: 0,
+            kill_streak: 0,
+            is_killing: false,
+        };
+
+        // 发起PK挑战
+        match PKD.challenge(challenger_stats, defender_stats).await {
+            Ok(battle) => {
+                battle.generate_status()
+            }
+            Err(e) => {
+                format!("§R{}§N", e)
+            }
+        }
+    } else {
+        format!("§R无法找到当前房间。§N")
     }
-    format!("§R这里没有叫做「{}」的目标可以进行PK。§N", target)
+}
+
+/// 继续PK战斗
+async fn pk_continue_command(userid: &str) -> String {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    match PKD.get_player_battle(userid).await {
+        Some(battle) => {
+            if battle.status == crate::gamenv::single::daemons::pkd::CombatStatus::Fighting {
+                // 执行下一回合
+                if let Some(round) = PKD.next_round(&battle.battle_id).await {
+                    let mut output = String::new();
+                    for log in &round.log {
+                        output.push_str(log);
+                        output.push_str("\n");
+                    }
+
+                    if round.ended {
+                        output.push_str(&format!("\n{}\n", battle.generate_result()));
+                        PKD.end_battle(&battle.battle_id).await;
+                    } else {
+                        output.push_str(&format!("\n{}\n", battle.generate_status()));
+                    }
+                    output
+                } else {
+                    "战斗已结束！\n[返回:look]".to_string()
+                }
+            } else {
+                battle.generate_result()
+            }
+        }
+        None => {
+            "你不在战斗中！\n[返回:look]".to_string()
+        }
+    }
+}
+
+/// 逃跑命令
+async fn escape_command(userid: &str) -> String {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    match PKD.escape(userid).await {
+        Ok(msg) => format!("{}\n[返回房间:look]", msg),
+        Err(e) => format!("{}\n[继续战斗:pk continue]", e),
+    }
+}
+
+/// 投降命令
+async fn surrender_command(userid: &str) -> String {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    match PKD.surrender(userid).await {
+        Ok(msg) => format!("{}\n[返回房间:look]", msg),
+        Err(e) => e,
+    }
 }
 
 /// 获取方向名称
