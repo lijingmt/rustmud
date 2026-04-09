@@ -187,6 +187,38 @@ createApp({
         };
     },
 
+    computed: {
+        // inputCommand 与 commandInput 双向绑定
+        inputCommand: {
+            get() {
+                return this.commandInput;
+            },
+            set(value) {
+                this.commandInput = value;
+            }
+        },
+        // isLoading 与 mudLoading 同步
+        isLoading() {
+            return this.mudLoading;
+        },
+        // connectionStatus
+        connectionStatus() {
+            return this.showLogin ? '未连接' : '已连接';
+        },
+        // 当前房间名称（从消息中解析）
+        currentRoomName() {
+            if (!this.state.messages || this.state.messages.length === 0) return '未知';
+            // 从第一条消息中提取房间名称（通常是绿色加粗的文本）
+            const firstMsg = this.state.messages[0];
+            if (!firstMsg || !firstMsg.text) return '未知';
+            // 移除颜色代码获取纯文本
+            const text = firstMsg.text.replace(/§[A-Z]/g, '').replace(/§N/g, '').trim();
+            // 第一行通常是房间名称
+            const lines = text.split('\\n');
+            return lines[0] || '未知';
+        }
+    },
+
     watch: {
         // 监听 mudLines 变化，更新后重新翻译并滚动到顶部
         mudLines() {
@@ -223,6 +255,46 @@ createApp({
             if (label.includes('上')) return '↑';
             if (label.includes('下')) return '↓';
             return '→';
+        },
+
+        // 渲染带颜色代码的文本
+        renderColoredText(text) {
+            if (!text) return '';
+            // 简单的颜色代码映射
+            const colorMap = {
+                '§R': '#ff6b6b',  // 红色
+                '§G': '#51cf66',  // 绿色
+                '§Y': '#ffd43b',  // 黄色
+                '§B': '#4dabf5',  // 蓝色
+                '§M': '#cc5de8',  // 紫色
+                '§C': '#22b8cf',  // 青色
+                '§W': '#ffffff',  // 白色
+                '§H': '#ffe066',  // 金色/高亮
+                '§N': ''          // 重置
+            };
+            let result = text;
+            // 移除颜色代码，返回纯文本（可以后续添加HTML渲染）
+            for (const [code, color] of Object.entries(colorMap)) {
+                result = result.replace(new RegExp(code, 'g'), '');
+            }
+            return result;
+        },
+
+        // 解析消息文本，返回HTML
+        renderMessage(msg) {
+            if (!msg || !msg.text) return '';
+            return this.renderColoredText(msg.text);
+        },
+
+        // 获取当前房间的显示文本
+        getRoomDisplay() {
+            if (!this.state.messages || this.state.messages.length === 0) {
+                return '正在加载...';
+            }
+            const firstMsg = this.state.messages[0];
+            if (!firstMsg || !firstMsg.text) return '';
+            // 简化：返回纯文本
+            return this.renderColoredText(firstMsg.text).split('\\n')[0];
         },
 
         detectApiBase() {
