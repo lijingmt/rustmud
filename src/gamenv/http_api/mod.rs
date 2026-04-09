@@ -698,6 +698,15 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
                 kill_command(&world_guard, &player_room, &target).await
             }
         }
+        "pk" => {
+            if args.is_empty() {
+                "你要和谁PK？".to_string()
+            } else {
+                let target = args.join(" ");
+                let world_guard = world_arc.read().await;
+                pk_command(&world_guard, &player_room, &target).await
+            }
+        }
         cmd if cmd.starts_with("say") => {
             let msg = args.join(" ");
             format!("{}说: {}", userid, msg)
@@ -836,11 +845,7 @@ async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str
                     output.push_str(&format!("\n§H【操作】§N\n"));
 
                     // 对话按钮
-                    if npc.dialogs.is_empty() {
-                        output.push_str(&format!("[对话:talk {}]\n", npc.id));
-                    } else {
-                        output.push_str(&format!("[对话:talk {}]\n", npc.id));
-                    }
+                    output.push_str(&format!("[对话:talk {}]\n", npc.id));
 
                     // 商店按钮（如果是商人）
                     if npc.shop.is_some() {
@@ -852,11 +857,11 @@ async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str
                         output.push_str(&format!("[§R攻击§N:kill {}]\n", npc.id));
                     }
 
+                    // PK按钮 - 对玩家或NPC进行PK
+                    output.push_str(&format!("[§RPK§N:pk {}]\n", npc.id));
+
                     // 任务按钮
                     output.push_str(&format!("[任务:quest {}]\n", npc.id));
-
-                    // 查看装备按钮
-                    output.push_str(&format!("[查看装备:look {} equipment]\n", npc.id));
 
                     output.push_str(&format!("\n§H========== 返回 =========§N\n"));
                     output.push_str("[返回房间:look]\n");
@@ -1009,6 +1014,47 @@ async fn kill_command(
         }
     }
     format!("这里没有叫做「{}」的生物。", target)
+}
+
+/// PK命令 - 玩家对战或强制攻击NPC
+async fn pk_command(
+    world: &crate::gamenv::world::GameWorld,
+    room_id: &str,
+    target: &str,
+) -> String {
+    if let Some(room) = world.get_room(room_id) {
+        // 先检查NPC
+        for npc_id in &room.npcs {
+            if let Some(npc) = world.get_npc(npc_id) {
+                if npc.id.contains(target) || npc.name.contains(target) || npc.short.contains(target) {
+                    return format!(
+                        "§Y你向{}发起了PK挑战！§N\n\n§C========== PK战斗开始 =========§N\n\
+                         §R玩家§N: 你 (Lv.1)\n\
+                         §B对手§N: {} (Lv.{})\n\n\
+                         §H【战斗提示】§N\n\
+                         PK系统正在开发中，敬请期待...\n\n\
+                         [§Y认输:give up§N]\n\
+                         [§Y返回:look§N]",
+                        npc.name, npc.short, npc.level
+                    );
+                }
+            }
+        }
+
+        // 检查怪物
+        for monster_id in &room.monsters {
+            if let Some(monster) = world.get_npc(monster_id) {
+                if monster.id.contains(target) || monster.name.contains(target) || monster.short.contains(target) {
+                    return format!(
+                        "§R你向{}发起了攻击！§N\n\n{}",
+                        monster.short,
+                        combat_round(target, monster)
+                    );
+                }
+            }
+        }
+    }
+    format!("§R这里没有叫做「{}」的目标可以进行PK。§N", target)
 }
 
 /// 获取方向名称
