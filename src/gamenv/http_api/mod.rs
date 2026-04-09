@@ -582,6 +582,7 @@ async fn execute_command_internal(
 async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConnection) -> String {
     use crate::gamenv::world::get_world;
     use crate::gamenv::player_state::get_player_manager;
+    use crate::gamenv::single::daemons::pkd::PKD;
 
     let parts: Vec<&str> = command.trim().split_whitespace().collect();
     let cmd = parts.get(0).unwrap_or(&"").to_lowercase();
@@ -592,6 +593,30 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
     let mut player_mgr_write = player_mgr.write().await;
     let player_state = player_mgr_write.get_or_create(userid.to_string()).await;
     drop(player_mgr_write); // 释放锁
+
+    // 检查是否在战斗中 - 战斗锁定机制
+    let in_battle = PKD.get_player_battle(userid).await.is_some();
+    if in_battle {
+        // 战斗中只允许以下命令
+        let allowed_commands = ["pk", "escape", "surrender", "look"];
+        if !allowed_commands.contains(&cmd.as_str()) {
+            return "§R战斗中无法执行此操作！§N\n\n\
+                   §Y【当前战斗】§N\n\
+                   输入「pk continue」继续战斗\n\
+                   输入「escape」逃跑\n\
+                   输入「surrender」投降\n\
+                   输入「look」查看战斗状态\n\
+                   ────────────────────────────\n\
+                   战斗结束后才能进行其他操作。".to_string();
+        }
+
+        // 如果是 pk 命令，必须是 "pk continue"
+        if cmd == "pk" && args.len() > 0 && args[0] != "continue" {
+            return "§R战斗中只能执行「pk continue」继续战斗！§N\n\
+                   输入「escape」逃跑\n\
+                   输入「surrender」投降".to_string();
+        }
+    }
 
     // 对于需要 world 的命令，先获取当前房间
     let player_room = {
@@ -604,6 +629,20 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
 
     match cmd.as_str() {
         "look" | "l" => {
+            // 战斗中查看战斗状态
+            if in_battle {
+                if let Some(battle) = PKD.get_player_battle(userid).await {
+                    if battle.status == crate::gamenv::single::daemons::pkd::CombatStatus::Fighting {
+                        return battle.generate_status();
+                    } else {
+                        // 战斗已结束，清理并显示结果
+                        let result = battle.generate_result();
+                        PKD.end_battle(&battle.battle_id).await;
+                        return result;
+                    }
+                }
+            }
+
             let world_guard = world_arc.read().await;
             // 检查是否有参数（查看NPC）
             if !args.is_empty() {
@@ -1228,6 +1267,7 @@ async fn pk_continue_command(userid: &str) -> String {
 
                     if round.ended {
                         output.push_str(&format!("\n{}\n", battle.generate_result()));
+                        // 清理战斗
                         PKD.end_battle(&battle.battle_id).await;
                     } else {
                         output.push_str(&format!("\n{}\n", battle.generate_status()));
@@ -1237,7 +1277,10 @@ async fn pk_continue_command(userid: &str) -> String {
                     "战斗已结束！\n[返回:look]".to_string()
                 }
             } else {
-                battle.generate_result()
+                // 战斗已结束，清理并显示结果
+                let result = battle.generate_result();
+                PKD.end_battle(&battle.battle_id).await;
+                result
             }
         }
         None => {
