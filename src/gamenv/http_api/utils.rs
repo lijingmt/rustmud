@@ -54,43 +54,42 @@ pub fn generate_session_id() -> String {
 
 /// 解析颜色代码 (对应 txpike9 的 § 颜色代码)
 /// 完整的颜色映射，包含数字、小写字母、大写字母和特殊代码
+/// 颜色已针对黄色背景优化 (白色/黄色改为深色)
 pub fn parse_color_codes(text: &str) -> String {
     // 数字代码 (0-9)
     let colors = [
         ("§0", "<span style='color:#000000'>"),      // 黑色-默认
-        ("§1", "<span style='color:#FF0000;font-weight:bold'>"),  // 红色-夏季节气
-        ("§2", "<span style='color:#00AA00;font-weight:bold'>"),  // 绿色-优秀
-        ("§3", "<span style='color:#0066CC;font-weight:bold'>"),  // 蓝色-稀有
-        ("§4", "<span style='color:#00AAFF'>"),      // 青色-冬季节气
-        ("§5", "<span style='color:#8B00FF;font-weight:bold'>"),  // 紫色-史诗
-        ("§6", "<span style='color:#FF8C00;font-weight:bold'>"),  // 金色-传说
-        ("§7", "<span style='color:#666666'>"),      // 白色-普通
-        ("§8", "<span style='color:#888888'>"),      // 灰色-劣质
-        ("§9", "<span style='color:#CCCCCC'>"),      // 浅灰
+        ("§1", "<span style='color:#CC0000;font-weight:bold'>"),  // 红色-夏季节气 (深红)
+        ("§2", "<span style='color:#006600;font-weight:bold'>"),  // 绿色-优秀 (深绿)
+        ("§3", "<span style='color:#004488;font-weight:bold'>"),  // 蓝色-稀有 (深蓝)
+        ("§4", "<span style='color:#006699'>"),      // 青色-冬季节气 (深青)
+        ("§5", "<span style='color:#660088;font-weight:bold'>"),  // 紫色-史诗 (深紫)
+        ("§6", "<span style='color:#AA6600;font-weight:bold'>"),  // 金色-传说 (深金)
+        ("§7", "<span style='color:#444444'>"),      // 灰色-普通
+        ("§8", "<span style='color:#666666'>"),      // 灰色-劣质
+        ("§9", "<span style='color:#888888'>"),      // 浅灰
         // 小写字母 (a-f)
-        ("§a", "<span style='color:#00CC00'>"),      // 亮绿色
-        ("§b", "<span style='color:#FF00FF'>"),      // 紫红色
-        ("§c", "<span style='color:#FF3366'>"),      // 粉红色
-        ("§d", "<span style='color:#FF6699'>"),      // 亮粉红
-        ("§e", "<span style='color:#CC8800'>"),      // 土黄色-标题
-        ("§f", "<span style='color:#333333'>"),      // 白色-默认
+        ("§a", "<span style='color:#008800'>"),      // 亮绿色 (深绿)
+        ("§b", "<span style='color:#990099'>"),      // 紫红色 (深紫红)
+        ("§c", "<span style='color:#AA2222'>"),      // 粉红色 (深粉)
+        ("§d", "<span style='color:#AA4466'>"),      // 亮粉红 (深粉红)
+        ("§e", "<span style='color:#885500'>"),      // 土黄色-标题 (深褐黄)
+        ("§f", "<span style='color:#333333'>"),      // 深灰-默认
         // 大写字母 (A-F, Y)
-        ("§A", "<span style='color:#00FF00;font-weight:bold'>"),  // 亮绿色-增强
-        ("§B", "<span style='color:#0099FF'>"),      // 亮蓝色
-        ("§C", "<span style='color:#FF0000;font-weight:bold'>"),  // 鲜红色-稀有标记
-        ("§D", "<span style='color:#FF1493'>"),      // 深粉红
-        ("§E", "<span style='color:#FFD700;font-weight:bold'>"),  // 金色-增强
-        ("§F", "<span style='color:#FFFFFF'>"),      // 纯白色
-        ("§Y", "<span style='color:#FFFF00'>"),      // 黄色
-        ("§G", "<span style='color:#00FF00'>"),      // 绿色(Good)
-        ("§R", "<span style='color:#FF0000'>"),      // 红色(Red)
-        ("§H", "<span style='color:#FFD700;font-weight:bold'>"),  // 金色/高亮(Highlight)
-        ("§N", "<span style='color:#FFFFFF'>"),      // 白色(Normal)
-        ("§W", "<span style='color:#FFFFFF'>"),      // 白色(White)
-        ("§B", "<span style='color:#0099FF'>"),      // 蓝色(Blue)
-        ("§M", "<span style='color:#FF00FF'>"),      // 紫色(Magenta)
-        ("§C", "<span style='color:#00FFFF'>"),      // 青色(Cyan)
-        ("§X", "<span style='color:#FF00FF'>"),      // 紫红色
+        ("§A", "<span style='color:#008800;font-weight:bold'>"),  // 亮绿色-增强 (深绿)
+        ("§B", "<span style='color:#0066AA'>"),      // 亮蓝色 (深蓝)
+        ("§C", "<span style='color:#AA0000;font-weight:bold'>"),  // 鲜红色-稀有标记 (深红)
+        ("§D", "<span style='color:#AA0055'>"),      // 深粉红 (深粉)
+        ("§E", "<span style='color:#AA6600;font-weight:bold'>"),  // 金色-增强 (深金)
+        ("§F", "<span style='color:#333333'>"),      // 深灰 (原白色)
+        ("§Y", "<span style='color:#886600'>"),      // 深黄 (原黄色)
+        ("§G", "<span style='color:#008800'>"),      // 绿色-深绿
+        ("§R", "<span style='color:#AA0000'>"),      // 红色-深红
+        ("§H", "<span style='color:#885500;font-weight:bold'>"),  // 金色/高亮-深褐黄
+        ("§N", "<span style='color:#333333'>"),      // 深灰 (原白色)
+        ("§W", "<span style='color:#333333'>"),      // 深灰 (原白色)
+        ("§M", "<span style='color:#880088'>"),      // 紫色-深紫
+        ("§X", "<span style='color:#880066'>"),      // 紫红色-深紫红
         // 特殊代码
         ("§r", "</span>"),   // 重置-小写
         ("§g", "<span class='ink-wash-gradient'>"),  // 水墨渐变
@@ -106,6 +105,7 @@ pub fn parse_color_codes(text: &str) -> String {
 }
 
 /// 解析颜色代码为 TextPart 列表（用于 JSON 格式输出）
+/// 颜色已针对黄色背景优化 (白色/黄色改为深色)
 pub fn parse_color_codes_to_parts(text: &str) -> Vec<TextPart> {
     let mut parts = Vec::new();
     let mut current_text = String::new();
@@ -132,37 +132,38 @@ pub fn parse_color_codes_to_parts(text: &str) -> Vec<TextPart> {
             // 获取颜色代码字符
             let color_char = chars[i + 1];
             let color = match color_char {
-                // 数字代码
-                '0' => Some("#000000".to_string()),
-                '1' => Some("#FF0000".to_string()),
-                '2' => Some("#00AA00".to_string()),
-                '3' => Some("#0066CC".to_string()),
-                '4' => Some("#00AAFF".to_string()),
-                '5' => Some("#8B00FF".to_string()),
-                '6' => Some("#FF8C00".to_string()),
-                '7' => Some("#666666".to_string()),
-                '8' => Some("#888888".to_string()),
-                '9' => Some("#CCCCCC".to_string()),
-                // 小写字母
-                'a' => Some("#00CC00".to_string()),
-                'b' => Some("#FF00FF".to_string()),
-                'c' => Some("#FF3366".to_string()),
-                'd' => Some("#FF6699".to_string()),
-                'e' => Some("#CC8800".to_string()),
-                'f' => Some("#333333".to_string()),
-                // 大写字母
-                'A' => Some("#00FF00".to_string()),
-                'B' => Some("#0099FF".to_string()),
-                'C' => Some("#FF0000".to_string()),
-                'D' => Some("#FF1493".to_string()),
-                'E' => Some("#FFD700".to_string()),
-                'F' => Some("#FFFFFF".to_string()),
-                'Y' => Some("#FFFF00".to_string()),
-                'G' => Some("#00FF00".to_string()),
-                'H' => Some("#FFD700".to_string()),
-                'N' | 'W' => Some("#FFFFFF".to_string()),
-                'M' | 'X' => Some("#FF00FF".to_string()),
-                'r' | 'R' => None,  // 重置颜色
+                // 数字代码 - 深色版本
+                '0' => Some("#000000".to_string()),      // 黑色
+                '1' => Some("#CC0000".to_string()),      // 深红
+                '2' => Some("#006600".to_string()),      // 深绿
+                '3' => Some("#004488".to_string()),      // 深蓝
+                '4' => Some("#006699".to_string()),      // 深青
+                '5' => Some("#660088".to_string()),      // 深紫
+                '6' => Some("#AA6600".to_string()),      // 深金
+                '7' => Some("#444444".to_string()),      // 深灰
+                '8' => Some("#666666".to_string()),      // 灰色
+                '9' => Some("#888888".to_string()),      // 浅灰
+                // 小写字母 - 深色版本
+                'a' => Some("#008800".to_string()),      // 深绿
+                'b' => Some("#990099".to_string()),      // 深紫红
+                'c' => Some("#AA2222".to_string()),      // 深粉
+                'd' => Some("#AA4466".to_string()),      // 深粉红
+                'e' => Some("#885500".to_string()),      // 深褐黄
+                'f' => Some("#333333".to_string()),      // 深灰
+                // 大写字母 - 深色版本
+                'A' => Some("#008800".to_string()),      // 深绿
+                'B' => Some("#0066AA".to_string()),      // 深蓝
+                'C' => Some("#AA0000".to_string()),      // 深红
+                'D' => Some("#AA0055".to_string()),      // 深粉
+                'E' => Some("#AA6600".to_string()),      // 深金
+                'F' => Some("#333333".to_string()),      // 深灰 (原白色)
+                'Y' => Some("#886600".to_string()),      // 深黄 (原黄色)
+                'G' => Some("#008800".to_string()),      // 深绿
+                'H' => Some("#885500".to_string()),      // 深金
+                'N' | 'W' => Some("#333333".to_string()), // 深灰 (原白色)
+                'M' | 'X' => Some("#880088".to_string()), // 深紫
+                'R' => Some("#AA0000".to_string()),      // 深红
+                'r' => None,  // 重置颜色
                 _ => {
                     // 未知代码，当作普通文本
                     current_text.push('§');
