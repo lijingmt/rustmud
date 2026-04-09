@@ -602,7 +602,15 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
     match cmd.as_str() {
         "look" | "l" => {
             let world_guard = world_arc.read().await;
-            look_command(&world_guard, &player_room).await
+            // 检查是否有参数（查看NPC）
+            if !args.is_empty() {
+                let target = args.join(" ");
+                // 尝试在当前房间查找NPC
+                look_npc_command(&world_guard, &player_room, &target).await
+            } else {
+                // 查看房间
+                look_command(&world_guard, &player_room).await
+            }
         }
         "north" | "n" => {
             let world_guard = world_arc.read().await;
@@ -804,6 +812,87 @@ async fn look_command(world: &crate::gamenv::world::GameWorld, room_id: &str) ->
         output
     } else {
         "无法找到当前房间。".to_string()
+    }
+}
+
+/// 查看NPC详情命令
+async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str, target: &str) -> String {
+    tracing::info!("look_npc_command called with target: '{}'", target);
+
+    let mut output = String::new();
+    let mut found_npc = false;
+
+    if let Some(room) = world.get_room(room_id) {
+        // 先检查房间内的NPC
+        for npc_id in &room.npcs {
+            if let Some(npc) = world.get_npc(npc_id) {
+                if npc.id.contains(target) || npc.name.contains(target) || npc.short.contains(target) {
+                    found_npc = true;
+                    output.push_str(&format!("§Y========== {} =========§N\n", npc.name));
+                    output.push_str(&format!("§C【等级】§N {}\n", npc.level));
+                    output.push_str(&format!("§C【描述】§N {}\n", npc.long));
+
+                    // 根据NPC类型显示不同的操作按钮
+                    output.push_str(&format!("\n§H【操作】§N\n"));
+
+                    // 对话按钮
+                    if npc.dialogs.is_empty() {
+                        output.push_str(&format!("[对话:talk {}]\n", npc.id));
+                    } else {
+                        output.push_str(&format!("[对话:talk {}]\n", npc.id));
+                    }
+
+                    // 商店按钮（如果是商人）
+                    if npc.shop.is_some() {
+                        output.push_str(&format!("[商店:shop {}]\n", npc.id));
+                    }
+
+                    // 攻击按钮（如果是怪物或敌对NPC）
+                    if room.monsters.contains(&npc.id) {
+                        output.push_str(&format!("[§R攻击§N:kill {}]\n", npc.id));
+                    }
+
+                    // 任务按钮
+                    output.push_str(&format!("[任务:quest {}]\n", npc.id));
+
+                    // 查看装备按钮
+                    output.push_str(&format!("[查看装备:look {} equipment]\n", npc.id));
+
+                    output.push_str(&format!("\n§H========== 返回 =========§N\n"));
+                    output.push_str("[返回房间:look]\n");
+                    break;
+                }
+            }
+        }
+
+        // 如果NPC列表中没找到，检查怪物列表
+        if !found_npc {
+            for monster_id in &room.monsters {
+                if let Some(monster) = world.get_npc(monster_id) {
+                    if monster.id.contains(target) || monster.name.contains(target) || monster.short.contains(target) {
+                        found_npc = true;
+                        output.push_str(&format!("§Y========== {} =========§N\n", monster.name));
+                        output.push_str(&format!("§C【等级】§N {}\n", monster.level));
+                        output.push_str(&format!("§C【生命值】§N {}/{}\n", monster.hp, monster.hp_max));
+                        output.push_str(&format!("§C【描述】§N {}\n", monster.long));
+
+                        // 怪物只有攻击选项
+                        output.push_str(&format!("\n§H【操作】§N\n"));
+                        output.push_str(&format!("[§R攻击§N:kill {}]\n", monster.id));
+
+                        output.push_str(&format!("\n§H========== 返回 =========§N\n"));
+                        output.push_str("[返回房间:look]\n");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if found_npc {
+        output
+    } else {
+        format!("§R这里没有叫做「{}」的生物。§N\n[返回:look]", target)
     }
 }
 

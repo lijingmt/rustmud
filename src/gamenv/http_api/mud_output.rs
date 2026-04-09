@@ -206,6 +206,102 @@ impl MudOutputParser {
             }
         }
 
+        // 检测 WAPMUD 菜单格式 [label:command]
+        if line.contains('[') && line.contains(']') {
+            // 使用正则表达式提取所有 [label:command] 格式的按钮
+            let mut remaining_text = line;
+            let mut menu_buttons = vec![];
+
+            while let Some(start) = remaining_text.find('[') {
+                // 添加 [ 之前的文本
+                if start > 0 {
+                    let text_before = &remaining_text[..start];
+                    if !text_before.trim().is_empty() {
+                        segments.push(MudSegment {
+                            r#type: SegmentType::Text,
+                            text: Some(text_before.to_string()),
+                            parts: Some(vec![TextPart {
+                                text: text_before.to_string(),
+                                color: None,
+                                bold: None,
+                                underline: None,
+                                link: None,
+                            }]),
+                            ..Default::default()
+                        });
+                    }
+                }
+
+                // 查找 ] 的位置
+                let after_bracket = &remaining_text[start + 1..];
+                if let Some(end) = after_bracket.find(']') {
+                    let bracket_content = &after_bracket[..end];
+                    remaining_text = &after_bracket[end + 1..];
+
+                    // 解析 label:command 格式
+                    if let Some(colon_pos) = bracket_content.find(':') {
+                        let label = &bracket_content[..colon_pos];
+                        let command = &bracket_content[colon_pos + 1..];
+
+                        // 确定按钮样式
+                        let button_class = if command.contains("kill") || command.contains("attack") {
+                            "btn-danger"
+                        } else if command.contains("talk") {
+                            "btn-primary"
+                        } else if command.contains("shop") {
+                            "btn-warning"
+                        } else if command.contains("quest") {
+                            "btn-info"
+                        } else {
+                            "btn-outline-primary"
+                        };
+
+                        menu_buttons.push((label.trim().to_string(), command.trim().to_string(), button_class));
+                    } else {
+                        // 没有冒号，整个内容作为标签，命令同标签
+                        let label = bracket_content.trim();
+                        menu_buttons.push((label.to_string(), label.to_string(), "btn-outline-primary"));
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            // 添加剩余文本
+            if !remaining_text.trim().is_empty() {
+                segments.push(MudSegment {
+                    r#type: SegmentType::Text,
+                    text: Some(remaining_text.to_string()),
+                    parts: Some(vec![TextPart {
+                        text: remaining_text.to_string(),
+                        color: None,
+                        bold: None,
+                        underline: None,
+                        link: None,
+                    }]),
+                    ..Default::default()
+                });
+            }
+
+            // 添加所有解析出的按钮
+            for (label, command, button_class) in menu_buttons {
+                segments.push(MudSegment {
+                    r#type: SegmentType::Button,
+                    label: Some(label),
+                    cmd: Some(command),
+                    class: Some(button_class.to_string()),
+                    ..Default::default()
+                });
+            }
+
+            if !segments.is_empty() {
+                return MudLine {
+                    r#type: "line".to_string(),
+                    segments,
+                };
+            }
+        }
+
         // 检测出口文本模式: "明显的出口: 东方 南方 西方" 等
         let clean_line = line.replace("§H", "").replace("§N", "").replace("§Y", "").replace("§R", "");
         if clean_line.contains("明显的出口:") || clean_line.contains("出口:") {

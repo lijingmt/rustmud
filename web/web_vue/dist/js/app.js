@@ -259,10 +259,18 @@ createApp({
                             if (cmd.startsWith('go ')) {
                                 cmd = cmd.substring(3); // 去掉 "go " 前缀
                             }
+                            // 使用后端返回的 class，如果没有则使用 getButtonStyle
+                            let buttonClass = seg.class || this.getButtonStyle(seg.label || '');
+                            // 如果后端返回的是 Bootstrap 类名，转换为我们的格式
+                            if (buttonClass.startsWith('btn-')) {
+                                // 直接使用后端返回的类名
+                            } else if (!buttonClass.startsWith('btn-outline-')) {
+                                buttonClass = 'btn-outline-' + buttonClass;
+                            }
                             segments.push({
                                 text: seg.label || seg.text || '按钮',
                                 isButton: true,
-                                buttonClass: this.getButtonStyle(seg.label || ''),
+                                buttonClass: buttonClass,
                                 command: cmd
                             });
                         }
@@ -272,10 +280,16 @@ createApp({
                             if (cmd.startsWith('go ')) {
                                 cmd = cmd.substring(3);
                             }
+                            let buttonClass = seg.class || this.getButtonStyle(seg.label || '');
+                            if (buttonClass.startsWith('btn-')) {
+                                // 直接使用后端返回的类名
+                            } else if (!buttonClass.startsWith('btn-outline-')) {
+                                buttonClass = 'btn-outline-' + buttonClass;
+                            }
                             segments.push({
                                 text: seg.label || seg.text || '链接',
                                 isButton: true,
-                                buttonClass: this.getButtonStyle(seg.label || ''),
+                                buttonClass: buttonClass,
                                 command: cmd
                             });
                         }
