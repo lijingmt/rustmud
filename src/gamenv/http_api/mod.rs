@@ -424,8 +424,10 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
     }
 
     // 解析输出为 mud_lines
-    let mud_lines = if command == "look" || command == "l" {
-        // look 命令使用完整的房间渲染
+    // 方向命令和 look 命令都使用完整的房间渲染
+    let is_direction_command = matches!(command, "north" | "south" | "east" | "west" | "up" | "down" | "n" | "s" | "e" | "w" | "u" | "d");
+    let mud_lines = if command == "look" || command == "l" || is_direction_command {
+        // look 命令和方向命令使用完整的房间渲染
         parser.generate_room_json()
     } else {
         // 其他命令解析输出
