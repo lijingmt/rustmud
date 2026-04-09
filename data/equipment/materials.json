@@ -1,0 +1,114 @@
+[
+  {
+    "id": "iron_ore",
+    "name": "铁矿石",
+    "material_type": "metal",
+    "rarity": 1,
+    "price": 10,
+    "description": "常见的铁矿石。"
+  },
+  {
+    "id": "steel",
+    "name": "钢材",
+    "material_type": "metal",
+    "rarity": 2,
+    "price": 50,
+    "description": "精炼的钢材。"
+  },
+  {
+    "id": "cold_iron",
+    "name": "寒铁",
+    "material_type": "metal",
+    "rarity": 4,
+    "price": 500,
+    "description": "蕴含寒气的特殊金属。"
+  },
+  {
+    "id": "mithril",
+    "name": "秘银",
+    "material_type": "metal",
+    "rarity": 6,
+    "price": 2000,
+    "description": "轻盈而坚硬的神奇金属。"
+  },
+  {
+    "id": "dragon_scale",
+    "name": "龙鳞",
+    "material_type": "rare_material",
+    "rarity": 8,
+    "price": 5000,
+    "description": "真龙脱落鳞片，极其珍贵。"
+  },
+  {
+    "id": "dragon_bone",
+    "name": "龙骨",
+    "material_type": "rare_material",
+    "rarity": 8,
+    "price": 8000,
+    "description": "真龙骨骼，蕴含强大力量。"
+  },
+  {
+    "id": "ice_crystal",
+    "name": "冰晶",
+    "material_type": "elemental",
+    "rarity": 4,
+    "price": 300,
+    "description": "纯净的冰元素结晶。"
+  },
+  {
+    "id": "fire_essence",
+    "name": "火之精华",
+    "material_type": "elemental",
+    "rarity": 7,
+    "price": 3000,
+    "description": "高纯度的火元素精华。"
+  },
+  {
+    "id": "wood",
+    "name": "木材",
+    "material_type": "organic",
+    "rarity": 1,
+    "price": 5,
+    "description": "普通的木材。"
+  },
+  {
+    "id": "leather",
+    "name": "皮革",
+    "material_type": "organic",
+    "rarity": 1,
+    "price": 8,
+    "description": "动物皮革。"
+  },
+  {
+    "id": "mythic_essence",
+    "name": "神话精华",
+    "material_type": "mythic",
+    "rarity": 10,
+    "price": 50000,
+    "description": "蕴含神话力量的精华。"
+  },
+  {
+    "id": "dragon_soul",
+    "name": "龙魂",
+    "material_type": "mythic",
+    "rarity": 10,
+    "price": 100000,
+    "description": "真龙之魂，极其罕见。"
+  },
+  {
+    "id": "star_metal",
+    "name": "陨星铁",
+    "material_type": "metal",
+    "rarity": 9,
+    "price": 20000,
+    "description": "来自天外的神秘金属。"
+  },
+  {
+    "id": "phoenix_tear",
+    "name": "凤凰之泪",
+    "material_type": "mythic",
+    "rarity": 9,
+    "price": 30000,
+    "description": "凤凰的眼泪，具有神奇力量。"
+  }
+]

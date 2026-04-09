@@ -1,0 +1,93 @@
+[
+  {
+    "id": "recipe_iron_sword",
+    "name": "铁剑配方",
+    "template_id": "weapon_iron_sword",
+    "materials": {
+      "iron_ore": 3,
+      "wood": 1
+    },
+    "success_rate": 95,
+    "level_req": 1,
+    "gold_cost": 50,
+    "partial_refund": true,
+    "description": "打造一把普通的铁剑。"
+  },
+  {
+    "id": "recipe_steel_blade",
+    "name": "钢刀配方",
+    "template_id": "weapon_steel_blade",
+    "materials": {
+      "iron_ore": 5,
+      "steel": 2,
+      "wood": 2
+    },
+    "success_rate": 80,
+    "level_req": 10,
+    "gold_cost": 200,
+    "partial_refund": true,
+    "description": "打造一把精钢刀刃。"
+  },
+  {
+    "id": "recipe_frost_sword",
+    "name": "寒冰剑配方",
+    "template_id": "weapon_frost_sword",
+    "materials": {
+      "steel": 5,
+      "ice_crystal": 3,
+      "cold_iron": 2
+    },
+    "success_rate": 60,
+    "level_req": 30,
+    "gold_cost": 1000,
+    "partial_refund": false,
+    "description": "打造蕴含寒冰之力的神剑。"
+  },
+  {
+    "id": "recipe_dragon_slayer",
+    "name": "屠龙刀配方",
+    "template_id": "weapon_dragon_slayer",
+    "materials": {
+      "dragon_scale": 5,
+      "dragon_bone": 3,
+      "mithril": 5,
+      "fire_essence": 2
+    },
+    "success_rate": 30,
+    "level_req": 60,
+    "gold_cost": 10000,
+    "partial_refund": false,
+    "description": "传说中的屠龙神刀，打造难度极高！"
+  },
+  {
+    "id": "recipe_dragon_scale_armor",
+    "name": "龙鳞甲配方",
+    "template_id": "armor_dragon_scale",
+    "materials": {
+      "dragon_scale": 10,
+      "steel": 10,
+      "leather": 5
+    },
+    "success_rate": 25,
+    "level_req": 60,
+    "gold_cost": 15000,
+    "partial_refund": false,
+    "description": "打造龙鳞制成的神甲。"
+  },
+  {
+    "id": "recipe_mythic_blade",
+    "name": "开天神剑配方",
+    "template_id": "weapon_mythic_blade",
+    "materials": {
+      "mythic_essence": 5,
+      "dragon_soul": 3,
+      "star_metal": 10,
+      "phoenix_tear": 5
+    },
+    "success_rate": 5,
+    "level_req": 100,
+    "gold_cost": 100000,
+    "partial_refund": false,
+    "description": "神话级武器，成功率仅5%！"
+  }
+]

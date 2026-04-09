@@ -1,0 +1,56 @@
+[
+  {
+    "id": "suit_dragon_slayer",
+    "name": "屠龙套装",
+    "items": [
+      "weapon_dragon_slayer",
+      "armor_dragon_scale"
+    ],
+    "bonuses": {
+      "2": {
+        "description": "2件套：屠龙之力",
+        "stats": {
+          "attack": 50,
+          "defense": 50,
+          "hp_max": 300,
+          "crit_rate": 10
+        },
+        "effects": [
+          "对龙类敌人伤害+30%",
+          "所有抗性+20"
+        ]
+      }
+    }
+  },
+  {
+    "id": "suit_frost_set",
+    "name": "寒冰套装",
+    "items": [
+      "weapon_frost_sword",
+      "armor_frost_plate",
+      "helmet_frost_crown"
+    ],
+    "bonuses": {
+      "2": {
+        "description": "2件套：寒冰护体",
+        "stats": {
+          "ice_resist": 50,
+          "defense": 30
+        },
+        "effects": []
+      },
+      "3": {
+        "description": "3件套：绝对零度",
+        "stats": {
+          "attack": 40,
+          "ice_resist": 100,
+          "crit_rate": 15
+        },
+        "effects": [
+          "攻击有10%概率冻结敌人2回合",
+          "冰系技能伤害+50%"
+        ]
+      }
+    }
+  }
+]

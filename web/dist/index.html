@@ -2,106 +2,926 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>天下AI网游 - Vue版</title>
-    <link rel="stylesheet" href="css/app.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>《天下AI网游》- Rust版</title>
+    <style>
+        /**
+         * ========================================================================
+         * 游戏UI样式 - 完整复刻txpike9界面
+         * ========================================================================
+         */
+        /* ========== 基础样式 ========== */
+        html, body {
+            font-family: "Noto Sans SC", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            font-size: 20px;
+            line-height: 1.6;
+            background: linear-gradient(135deg, #FFF9E6 0%, #FFEBCD 100%);
+            color: #2c3e50;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        /* 响应式容器 */
+        .game-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 15px;
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        @media (max-width: 600px) {
+            .game-container {
+                max-width: 100%;
+                padding: 10px;
+            }
+        }
+
+        @media (min-width: 768px) {
+            .game-container {
+                max-width: 900px;
+                padding: 20px;
+            }
+        }
+
+        /* ========== 登录弹窗 ========== */
+        .login-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .login-modal {
+            background: linear-gradient(135deg, rgba(255, 249, 230, 0.95) 0%, rgba(255, 235, 205, 0.95) 100%);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3),
+                        0 0 0 1px rgba(255, 215, 0, 0.3);
+            animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .login-title {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .login-title h1 {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #FF8C00 0%, #DAA520 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 10px 0;
+            text-shadow: 0 2px 10px rgba(255, 140, 0, 0.2);
+        }
+
+        .login-title p {
+            color: #7f8c8d;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #555;
+            font-weight: 500;
+            font-size: 16px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 14px 18px;
+            font-size: 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            outline: none;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+            box-sizing: border-box;
+        }
+
+        .form-control:focus {
+            border-color: #FFD700;
+            box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.15);
+            background: #fff;
+        }
+
+        .form-control::placeholder {
+            color: #aaa;
+        }
+
+        /* ========== 按钮样式 ========== */
+        .btn {
+            display: inline-block;
+            padding: 14px 28px;
+            margin: 5px 3px;
+            font-size: 18px;
+            font-weight: 600;
+            text-align: center;
+            border-radius: 12px;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-block {
+            width: 100%;
+            margin: 0;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #fff;
+            border-color: #DAA520;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 165, 0, 0.4);
+            background: linear-gradient(135deg, #FFA500 0%, #FF8C00 100%);
+        }
+
+        .btn-info {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: #fff;
+            border-color: #2980b9;
+        }
+
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+            color: #fff;
+            border-color: #27ae60;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
+            color: #fff;
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+            color: #fff;
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-outline-primary {
+            background: transparent;
+            color: #FF8C00;
+            border: 2px solid #FF8C00;
+        }
+
+        .btn-outline-primary:hover {
+            background: rgba(255, 140, 0, 0.1);
+            color: #DAA520;
+            border-color: #DAA520;
+        }
+
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 16px;
+        }
+
+        .btn-lg {
+            padding: 18px 36px;
+            font-size: 20px;
+        }
+
+        /* ========== 消息样式 ========== */
+        .message {
+            padding: 12px 20px;
+            margin: 10px 0;
+            border-radius: 10px;
+            font-size: 16px;
+            animation: messageSlideIn 0.3s ease;
+        }
+
+        @keyframes messageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .message-error {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.15) 0%, rgba(192, 57, 43, 0.15) 100%);
+            color: #c0392b;
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+
+        .message-success {
+            background: linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.15) 100%);
+            color: #27ae60;
+            border: 1px solid rgba(46, 204, 113, 0.3);
+        }
+
+        .message-info {
+            background: linear-gradient(135deg, rgba(52, 152, 219, 0.15) 0%, rgba(41, 128, 185, 0.15) 100%);
+            color: #2980b9;
+            border: 1px solid rgba(52, 152, 219, 0.3);
+        }
+
+        .message-warning {
+            background: linear-gradient(135deg, rgba(243, 156, 18, 0.15) 0%, rgba(230, 126, 34, 0.15) 100%);
+            color: #d68910;
+            border: 1px solid rgba(243, 156, 18, 0.3);
+        }
+
+        .message-system {
+            background: linear-gradient(135deg, rgba(142, 68, 173, 0.15) 0%, rgba(125, 60, 152, 0.15) 100%);
+            color: #8e44ad;
+            border: 1px solid rgba(142, 68, 173, 0.3);
+        }
+
+        .message-combat {
+            background: linear-gradient(135deg, rgba(231, 76, 60, 0.2) 0%, rgba(192, 57, 43, 0.2) 100%);
+            color: #c0392b;
+            border: 1px solid rgba(231, 76, 60, 0.4);
+            font-weight: 600;
+        }
+
+        .message-text {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        /* ========== 游戏界面 ========== */
+        .game-interface {
+            display: none;
+        }
+
+        .game-interface.active {
+            display: block;
+        }
+
+        /* ========== 顶部状态栏 ========== */
+        .status-bar {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 249, 230, 0.95) 100%);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1),
+                        0 0 0 1px rgba(255, 215, 0, 0.2);
+        }
+
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 215, 0, 0.2);
+        }
+
+        .player-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FF8C00;
+            text-shadow: 0 2px 5px rgba(255, 140, 0, 0.2);
+        }
+
+        .player-level {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #fff;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(255, 165, 0, 0.3);
+        }
+
+        .stats-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .stat-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .stat-label {
+            font-weight: 600;
+            color: #555;
+            min-width: 35px;
+            font-size: 16px;
+        }
+
+        .stat-track {
+            flex: 1;
+            height: 24px;
+            background: rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .stat-fill {
+            height: 100%;
+            border-radius: 12px;
+            transition: width 0.5s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-fill.hp {
+            background: linear-gradient(90deg, #e74c3c 0%, #c0392b 100%);
+        }
+
+        .stat-fill.mp {
+            background: linear-gradient(90deg, #3498db 0%, #2980b9 100%);
+        }
+
+        .stat-fill.exp {
+            background: linear-gradient(90deg, #f39c12 0%, #e67e22 100%);
+        }
+
+        .stat-value {
+            min-width: 80px;
+            text-align: right;
+            font-weight: 600;
+            color: #555;
+            font-size: 15px;
+        }
+
+        /* ========== 游戏输出区 ========== */
+        .game-output {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 215, 0, 0.3);
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+
+        .game-output::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .game-output::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 10px;
+        }
+
+        .game-output::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            border-radius: 10px;
+        }
+
+        /* ========== 操作按钮区 ========== */
+        .action-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 16px;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+            min-width: 100px;
+        }
+
+        /* ========== 方向导航 ========== */
+        .navigation-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 16px;
+        }
+
+        .nav-btn {
+            padding: 20px;
+            font-size: 18px;
+            font-weight: 600;
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 165, 0, 0.2) 100%);
+            border: 2px solid rgba(255, 165, 0, 0.4);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: #FF8C00;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(255, 165, 0, 0.4);
+            background: linear-gradient(135deg, rgba(255, 215, 0, 0.3) 0%, rgba(255, 165, 0, 0.3) 100%);
+        }
+
+        .nav-icon {
+            font-size: 28px;
+        }
+
+        .nav-label {
+            font-size: 16px;
+        }
+
+        .nav-center {
+            grid-column: 2;
+        }
+
+        /* ========== 命令输入区 ========== */
+        .command-input {
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 249, 230, 0.95) 100%);
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 12px;
+        }
+
+        .cmd-input {
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            outline: none;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.9);
+            color: #2c3e50;
+        }
+
+        .cmd-input:focus {
+            border-color: #FFD700;
+            box-shadow: 0 0 0 4px rgba(255, 215, 0, 0.15);
+        }
+
+        .send-btn {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(255, 165, 0, 0.3);
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 165, 0, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* ========== 连接状态 ========== */
+        .connection-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 100;
+        }
+
+        .connection-status.connected {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: #fff;
+        }
+
+        .connection-status.disconnected {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: #fff;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #fff;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ========== 快捷命令栏 ========== */
+        .quick-commands {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 12px;
+        }
+
+        .quick-cmd {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 165, 0, 0.3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #555;
+        }
+
+        .quick-cmd:hover {
+            background: rgba(255, 215, 0, 0.2);
+            border-color: #FFD700;
+            transform: translateY(-1px);
+        }
+
+        /* ========== 响应式调整 ========== */
+        @media (max-width: 600px) {
+            html, body {
+                font-size: 16px;
+            }
+
+            .login-modal {
+                padding: 30px 20px;
+                margin: 20px;
+            }
+
+            .player-header {
+                flex-direction: column;
+                gap: 10px;
+                text-align: center;
+            }
+
+            .stat-bar {
+                flex-wrap: wrap;
+            }
+
+            .stat-label {
+                min-width: 30px;
+                font-size: 14px;
+            }
+
+            .stat-value {
+                min-width: 60px;
+                font-size: 13px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .action-buttons .btn {
+                min-width: 100%;
+            }
+
+            .navigation-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                padding: 15px;
+            }
+
+            .nav-btn {
+                padding: 15px 10px;
+                font-size: 14px;
+            }
+
+            .nav-icon {
+                font-size: 20px;
+            }
+
+            .command-input {
+                flex-direction: column;
+                padding: 15px;
+            }
+
+            .send-btn {
+                width: 100%;
+            }
+
+            .connection-status {
+                bottom: 10px;
+                right: 10px;
+                padding: 10px 16px;
+                font-size: 12px;
+            }
+        }
+
+        /* ========== 动画效果 ========== */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+
+        .slide-up {
+            animation: slideUp 0.5s ease;
+        }
+
+        /* ========== 加载动画 ========== */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ========== 隐藏类 ========== */
+        .hidden {
+            display: none !important;
+        }
+    </style>
 </head>
 <body>
     <div id="app">
-        <!-- 登录弹窗 -->
-        <div class="modal-overlay" v-if="showLogin">
-            <div class="modal">
-                <h2>账号登录</h2>
+        <!-- 登录界面 -->
+        <div class="login-overlay" v-if="showLogin">
+            <div class="login-modal">
+                <div class="login-title">
+                    <h1>《天下AI网游》</h1>
+                    <p>RustMUD - 1:1复刻txpike9</p>
+                </div>
+
                 <div class="form-group">
                     <label>账号</label>
-                    <input type="text" v-model="loginForm.userid" placeholder="输入账号">
+                    <input type="text"
+                           v-model="loginForm.userid"
+                           class="form-control"
+                           placeholder="请输入账号"
+                           @keyup.enter="focusPassword">
                 </div>
+
                 <div class="form-group">
                     <label>密码</label>
-                    <input type="password" v-model="loginForm.password" placeholder="输入密码">
+                    <input type="password"
+                           ref="passwordInput"
+                           v-model="loginForm.password"
+                           class="form-control"
+                           placeholder="请输入密码"
+                           @keyup.enter="doLogin">
                 </div>
-                <button class="btn btn-primary btn-block" @click="doLogin">
-                    {{ isLoggingIn ? '登录中...' : '登录' }}
+
+                <button class="btn btn-primary btn-block"
+                        @click="doLogin"
+                        :disabled="isLoggingIn">
+                    <span v-if="isLoggingIn" class="loading"></span>
+                    <span v-else>{{ isLoggingIn ? '登录中...' : '登录游戏' }}</span>
                 </button>
-                <div v-if="loginError" class="message message-error" style="margin-top:15px">
+
+                <div v-if="loginError" class="message message-error">
                     {{ loginError }}
+                </div>
+
+                <div style="margin-top: 25px; text-align: center;">
+                    <p style="color: #7f8c8d; font-size: 13px; margin-bottom: 10px;">
+                        还没有账号？<a href="#" style="color: #FF8C00;">立即注册</a>
+                    </p>
                 </div>
             </div>
         </div>
 
-        <!-- 顶部状态栏 -->
-        <header class="game-header" v-if="!showLogin">
-            <div class="player-info">
-                <div class="player-main">
-                    <div class="player-name">{{ state.player?.name || '加载中...' }}</div>
-                    <div class="player-level">Lv.{{ state.player?.level || 0 }}</div>
-                </div>
-            </div>
-
-            <div class="status-bars" v-if="state.player">
+        <!-- 游戏界面 -->
+        <div class="game-container" :class="{active: !showLogin}">
+            <div class="game-interface" :class="{active: !showLogin}">
+                <!-- 顶部状态栏 -->
                 <div class="status-bar">
-                    <div class="bar-label">HP</div>
-                    <div class="bar-track">
-                        <div class="bar-fill hp-bar" :style="{width: (state.player.hpPercent || 0) + '%'}"></div>
+                    <div class="player-header">
+                        <div class="player-name">{{ state.player?.name || '加载中...' }}</div>
+                        <div class="player-level">Lv.{{ state.player?.level || 1 }}</div>
                     </div>
-                    <div class="bar-value">{{ state.player.hp || 0 }}/{{ state.player.hpMax || 0 }}</div>
+
+                    <div class="stats-container" v-if="state.player">
+                        <div class="stat-bar">
+                            <span class="stat-label">HP</span>
+                            <div class="stat-track">
+                                <div class="stat-fill hp"
+                                     :style="{width: (state.player.hpPercent || 0) + '%'}">
+                                    {{ state.player.hpPercent || 0 }}%
+                                </div>
+                            </div>
+                            <span class="stat-value">{{ state.player.hp || 0 }}/{{ state.player.hpMax || 0 }}</span>
+                        </div>
+
+                        <div class="stat-bar">
+                            <span class="stat-label">MP</span>
+                            <div class="stat-track">
+                                <div class="stat-fill mp"
+                                     :style="{width: (state.player.mpPercent || 0) + '%'}">
+                                    {{ state.player.mpPercent || 0 }}%
+                                </div>
+                            </div>
+                            <span class="stat-value">{{ state.player.mp || 0 }}/{{ state.player.mpMax || 0 }}</span>
+                        </div>
+
+                        <div class="stat-bar" v-if="state.player.exp !== undefined">
+                            <span class="stat-label">经验</span>
+                            <div class="stat-track">
+                                <div class="stat-fill exp"
+                                     :style="{width: (state.player.expPercent || 0) + '%'}">
+                                    {{ state.player.expPercent || 0 }}%
+                                </div>
+                            </div>
+                            <span class="stat-value">{{ state.player.exp || 0 }}</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="status-bar">
-                    <div class="bar-label">MP</div>
-                    <div class="bar-track">
-                        <div class="bar-fill mp-bar" :style="{width: (state.player.mpPercent || 0) + '%'}"></div>
+
+                <!-- 快捷命令 -->
+                <div class="quick-commands" v-if="!showLogin">
+                    <button class="quick-cmd" @click="sendCommand('look')">查看</button>
+                    <button class="quick-cmd" @click="sendCommand('inventory')">背包</button>
+                    <button class="quick-cmd" @click="sendCommand('score')">状态</button>
+                    <button class="quick-cmd" @click="sendCommand('who')">在线</button>
+                    <button class="quick-cmd" @click="sendCommand('skills')">技能</button>
+                </div>
+
+                <!-- 游戏输出区 -->
+                <div class="game-output" ref="messageContainer">
+                    <div v-for="(msg, index) in state.messages" :key="msg.id || index"
+                         :class="['message', 'message-' + (msg.type || 'info')]">
+                        <span class="message-text">{{ msg.text }}</span>
                     </div>
-                    <div class="bar-value">{{ state.player.mp || 0 }}/{{ state.player.mpMax || 0 }}</div>
+                    <div v-if="state.messages.length === 0" style="color: #999; text-align: center; padding: 40px;">
+                        欢迎来到天下AI网游！
+                    </div>
+                </div>
+
+                <!-- 操作按钮区 -->
+                <div class="action-buttons" v-if="!showLogin && state.actions?.length">
+                    <button v-for="action in state.actions"
+                            :key="action.id"
+                            class="btn"
+                            :class="'btn-' + (action.style || 'primary')"
+                            @click="sendCommand(action.command)">
+                        {{ action.label }}
+                    </button>
+                </div>
+
+                <!-- 方向导航 -->
+                <div class="navigation-grid" v-if="!showLogin && state.navigation?.exits">
+                    <button v-if="hasExit('north')" class="nav-btn" @click="sendCommand('north')">
+                        <span class="nav-icon">↑</span>
+                        <span class="nav-label">{{ getExitLabel('north') }}</span>
+                    </button>
+                    <button v-if="hasExit('west')" class="nav-btn" @click="sendCommand('west')">
+                        <span class="nav-icon">←</span>
+                        <span class="nav-label">{{ getExitLabel('west') }}</span>
+                    </button>
+                    <button v-if="hasExit('up')" class="nav-btn" @click="sendCommand('up')">
+                        <span class="nav-icon">▲</span>
+                        <span class="nav-label">{{ getExitLabel('up') }}</span>
+                    </button>
+                    <button v-if="hasExit('east')" class="nav-btn" @click="sendCommand('east')">
+                        <span class="nav-icon">→</span>
+                        <span class="nav-label">{{ getExitLabel('east') }}</span>
+                    </button>
+                    <button v-if="hasExit('down')" class="nav-btn" @click="sendCommand('down')">
+                        <span class="nav-icon">▼</span>
+                        <span class="nav-label">{{ getExitLabel('down') }}</span>
+                    </button>
+                    <button v-if="hasExit('south')" class="nav-btn" @click="sendCommand('south')">
+                        <span class="nav-icon">↓</span>
+                        <span class="nav-label">{{ getExitLabel('south') }}</span>
+                    </button>
+                </div>
+
+                <!-- 命令输入区 -->
+                <div class="command-input" v-if="!showLogin">
+                    <input type="text"
+                           ref="cmdInput"
+                           class="cmd-input"
+                           v-model="inputCommand"
+                           @keyup.enter="sendCommand(inputCommand)"
+                           placeholder="输入命令... (如: look, north, say hello)"
+                           :disabled="isLoading">
+                    <button class="send-btn" @click="sendCommand(inputCommand)" :disabled="isLoading">
+                        {{ isLoading ? '发送中...' : '发送' }}
+                    </button>
                 </div>
             </div>
-        </header>
+        </div>
 
-        <!-- 主内容区 -->
-        <main class="game-content" ref="messageContainer" v-if="!showLogin">
-            <div v-for="msg in state.messages" :key="msg.id"
-                 :class="['message', 'message-' + msg.type]">
-                <span class="message-text">{{ msg.text }}</span>
-            </div>
-        </main>
-
-        <!-- 操作按钮区 -->
-        <section class="game-actions" v-if="!showLogin && state.actions?.length">
-            <button v-for="action in state.actions" :key="action.id"
-                    class="btn btn-action"
-                    :class="'btn-' + (action.style || 'default')"
-                    @click="sendCommand(action.command)">
-                {{ action.label }}
-            </button>
-        </section>
-
-        <!-- 方向导航 -->
-        <nav class="game-navigation" v-if="!showLogin && state.navigation?.exits">
-            <button v-for="exit in state.navigation.exits" :key="exit.direction"
-                    class="nav-btn" @click="sendCommand(exit.command)">
-                <span class="nav-icon">{{ getNavIcon(exit.label) }}</span>
-                <span class="nav-label">{{ exit.label }}</span>
-            </button>
-        </nav>
-
-        <!-- 命令输入区 -->
-        <footer class="game-input" v-if="!showLogin">
-            <input type="text" class="cmd-input" v-model="inputCommand"
-                   @keyup.enter="sendCommand(inputCommand)"
-                   placeholder="输入命令..." :disabled="isLoading"
-                   ref="cmdInput">
-            <button class="send-btn" @click="sendCommand(inputCommand)" :disabled="isLoading">
-                发送
-            </button>
-        </footer>
-
-        <!-- 连接状态 -->
+        <!-- 连接状态指示器 -->
         <div class="connection-status" :class="{connected: !showLogin, disconnected: showLogin}">
             <span class="status-dot"></span>
-            {{ connectionStatus }}
+            <span>{{ connectionStatus }}</span>
         </div>
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="js/app.js?v=20260408-2"></script>
+    <script src="js/app.js?v=20260408-3"></script>
 </body>
 </html>
