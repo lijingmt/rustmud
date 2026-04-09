@@ -1069,7 +1069,7 @@ async fn pk_command(
                         defense: 3,
                         dodge: 5,
                         parry: 4,
-                        pk_mode: PkMode::Peace,
+                        pk_mode: PkMode::Free,  // NPC可以被攻击
                         pk_value: 0,
                         kill_streak: 0,
                         is_killing: false,
