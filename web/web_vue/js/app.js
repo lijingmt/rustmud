@@ -147,6 +147,7 @@ createApp({
             // JSON模式 (vue-ui-3: 无iframe，Vue直接渲染)
             useJsonMode: true,  // 使用JSON模式代替iframe
             mudLines: [],  // MUD输出行数组
+            parsedMudLinesData: [],  // 解析后的MUD行数据（用于模板渲染）
             mudLoading: false,  // MUD加载中状态
             slowLoadingTip: false,  // 慢速加载提示（超过3秒显示）
             loadingTimer: null,  // 加载计时器
@@ -209,12 +210,38 @@ createApp({
         mudContainerHeight() {
             return Math.max(300, window.innerHeight - 200);
         },
-        // 解析 MUD 行为可渲染的格式 - 直接使用 mudLines
+        // 解析 MUD 行为可渲染的格式 - 返回数据属性
         parsedMudLines() {
-            console.log('[parsedMudLines] called, mudLines:', this.mudLines?.length, 'mudLines[0]:', this.mudLines?.[0]);
+            console.log('[parsedMudLines computed] called, returning parsedMudLinesData:', this.parsedMudLinesData.length);
+            return this.parsedMudLinesData;
+        }
+    },
+
+    watch: {
+        // 监听 mudLines 变化，更新后重新翻译并滚动到顶部
+        mudLines(newLines) {
+            console.log('[watch mudLines] triggered, count:', newLines?.length);
+            // 更新解析后的 MUD 行数据
+            this.updateParsedMudLines();
+            this.$nextTick(() => {
+                this.reapplyTranslation();
+                // 每次更新后滚动到顶部
+                const container = document.querySelector('.mud-output-container');
+                if (container) {
+                    container.scrollTop = 0;
+                    // 根据行数动态调整高度
+                    this.adjustContainerHeight();
+                }
+            });
+        }
+    },
+
+    methods: {
+        // 更新解析后的 MUD 行数据
+        updateParsedMudLines() {
+            console.log('[updateParsedMudLines] called, mudLines:', this.mudLines?.length);
             const lines = [];
 
-            // 优先使用 mudLines（这个总是在命令执行后更新）
             if (this.mudLines && this.mudLines.length > 0) {
                 for (const mudLine of this.mudLines) {
                     if (mudLine.type === 'empty') {
@@ -222,11 +249,9 @@ createApp({
                         continue;
                     }
                     if (mudLine.type === 'line' && mudLine.segments) {
-                        // 解析 segments
                         const segments = [];
                         for (const seg of mudLine.segments) {
                             if (seg.type === 'text') {
-                                // 检查是否是按钮
                                 const buttonMatch = seg.text.match(/\*\*([^*]+)\*\*/);
                                 if (buttonMatch) {
                                     segments.push({
@@ -236,14 +261,12 @@ createApp({
                                         command: this.getButtonCommand(buttonMatch[1])
                                     });
                                 } else {
-                                    // 移除颜色代码的纯文本
                                     segments.push({
                                         text: seg.text.replace(/§[A-Z]/g, '').replace(/§N/g, ''),
                                         isButton: false
                                     });
                                 }
                             } else if (seg.type === 'link') {
-                                // 链接类型 - 转换为按钮
                                 segments.push({
                                     text: seg.text || seg.label || '链接',
                                     isButton: true,
@@ -259,33 +282,14 @@ createApp({
                 }
             }
 
-            // 如果解析后没有内容，显示加载中
             if (lines.length === 0) {
-                return [{ isEmpty: false, segments: [{ text: '正在加载...', isButton: false }] }];
+                lines.push({ isEmpty: false, segments: [{ text: '正在加载...', isButton: false }] });
             }
 
-            console.log('[parsedMudLines] lines count:', lines.length);
-            return lines;
-        }
-    },
+            this.parsedMudLinesData = lines;
+            console.log('[updateParsedMudLines] updated parsedMudLinesData:', lines.length);
+        },
 
-    watch: {
-        // 监听 mudLines 变化，更新后重新翻译并滚动到顶部
-        mudLines() {
-            this.$nextTick(() => {
-                this.reapplyTranslation();
-                // 每次更新后滚动到顶部
-                const container = document.querySelector('.mud-output-container');
-                if (container) {
-                    container.scrollTop = 0;
-                    // 根据行数动态调整高度
-                    this.adjustContainerHeight();
-                }
-            });
-        }
-    },
-
-    methods: {
         // 重新应用翻译（用于 mudLines 更新后）
         reapplyTranslation() {
             const savedLang = localStorage.getItem('userLanguage');
@@ -1244,6 +1248,9 @@ createApp({
                 this.mudLines = data.lines || [];
                 console.log('[Login] mudLines updated, count:', this.mudLines.length);
                 console.log('[Login] mudLines[0]:', this.mudLines[0]);
+
+                // 强制触发 Vue 响应式更新
+                this.$forceUpdate();
 
                 // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
                 if (data.state) {
