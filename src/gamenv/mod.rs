@@ -1,6 +1,7 @@
 // gamenv/mod.rs - Game environment module
 // Corresponds to txpike9/gamenv/ directory
 
+pub mod core;
 pub mod master;
 pub mod user;
 pub mod cmds;
