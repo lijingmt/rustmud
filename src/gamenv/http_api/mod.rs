@@ -1013,21 +1013,77 @@ async fn pk_command(
     userid: &str,
     target: &str,
 ) -> String {
+    use crate::gamenv::single::daemons::pkd::{PKD, PkMode, CombatStats};
+
+    // 获取玩家数据（用于战斗）
+    let player_level = 1;
+    let player_hp = 100;
+    let player_hp_max = 100;
+    let player_attack = 10;
+    let player_defense = 5;
+
     if let Some(room) = world.get_room(room_id) {
-        // 先检查NPC
+        // 先检查NPC - 使用PK战斗系统
         for npc_id in &room.npcs {
             if let Some(npc) = world.get_npc(npc_id) {
                 if npc.id.contains(target) || npc.name.contains(target) || npc.short.contains(target) {
-                    return format!(
-                        "§Y你向{}发起了PK挑战！§N\n\n§C========== PK战斗开始 =========§N\n\
-                         §R玩家§N: 你 (Lv.1)\n\
-                         §B对手§N: {} (Lv.{})\n\n\
-                         §H【战斗提示】§N\n\
-                         PK系统正在开发中，敬请期待...\n\n\
-                         [§Y认输:give up§N]\n\
-                         [§Y返回:look§N]",
-                        npc.name, npc.short, npc.level
-                    );
+                    // 构建挑战者数据
+                    let challenger_stats = CombatStats {
+                        id: userid.to_string(),
+                        name: userid.to_string(),
+                        name_cn: format!("玩家{}", &userid[..userid.len().min(3)]),
+                        level: player_level,
+                        hp: player_hp,
+                        hp_max: player_hp_max,
+                        mp: 50,
+                        mp_max: 50,
+                        jing: 100,
+                        jing_max: 100,
+                        qi: 50,
+                        qi_max: 50,
+                        attack: player_attack,
+                        defense: player_defense,
+                        dodge: 8,
+                        parry: 6,
+                        pk_mode: PkMode::Free,
+                        pk_value: 0,
+                        kill_streak: 0,
+                        is_killing: false,
+                    };
+
+                    // 构建防守者（NPC）数据
+                    let defender_stats = CombatStats {
+                        id: npc.id.clone(),
+                        name: npc.name.clone(),
+                        name_cn: npc.short.clone(),
+                        level: npc.level,
+                        hp: npc.hp,
+                        hp_max: npc.hp_max,
+                        mp: 0,
+                        mp_max: 0,
+                        jing: 100,
+                        jing_max: 100,
+                        qi: 0,
+                        qi_max: 0,
+                        attack: 5,
+                        defense: 3,
+                        dodge: 5,
+                        parry: 4,
+                        pk_mode: PkMode::Peace,
+                        pk_value: 0,
+                        kill_streak: 0,
+                        is_killing: false,
+                    };
+
+                    // 发起战斗
+                    return match PKD.challenge(challenger_stats, defender_stats).await {
+                        Ok(battle) => {
+                            battle.generate_status()
+                        }
+                        Err(e) => {
+                            format!("§R无法发起战斗: {}§N\n[返回:look]", e)
+                        }
+                    };
                 }
             }
         }
@@ -1036,78 +1092,122 @@ async fn pk_command(
         for monster_id in &room.monsters {
             if let Some(monster) = world.get_npc(monster_id) {
                 if monster.id.contains(target) || monster.name.contains(target) || monster.short.contains(target) {
-                    return format!(
-                        "§R你向{}发起了攻击！§N\n\n{}",
-                        monster.short,
-                        combat_round(target, monster)
-                    );
+                    // 构建挑战者数据
+                    let challenger_stats = CombatStats {
+                        id: userid.to_string(),
+                        name: userid.to_string(),
+                        name_cn: format!("玩家{}", &userid[..userid.len().min(3)]),
+                        level: player_level,
+                        hp: player_hp,
+                        hp_max: player_hp_max,
+                        mp: 50,
+                        mp_max: 50,
+                        jing: 100,
+                        jing_max: 100,
+                        qi: 50,
+                        qi_max: 50,
+                        attack: player_attack,
+                        defense: player_defense,
+                        dodge: 8,
+                        parry: 6,
+                        pk_mode: PkMode::Free,
+                        pk_value: 0,
+                        kill_streak: 0,
+                        is_killing: false,
+                    };
+
+                    // 构建防守者（怪物）数据
+                    let defender_stats = CombatStats {
+                        id: monster.id.clone(),
+                        name: monster.name.clone(),
+                        name_cn: monster.short.clone(),
+                        level: monster.level,
+                        hp: monster.hp,
+                        hp_max: monster.hp_max,
+                        mp: 0,
+                        mp_max: 0,
+                        jing: 100,
+                        jing_max: 100,
+                        qi: 0,
+                        qi_max: 0,
+                        attack: 8,
+                        defense: 4,
+                        dodge: 6,
+                        parry: 3,
+                        pk_mode: PkMode::Free,
+                        pk_value: 0,
+                        kill_streak: 0,
+                        is_killing: true,
+                    };
+
+                    // 发起战斗
+                    return match PKD.challenge(challenger_stats, defender_stats).await {
+                        Ok(battle) => {
+                            battle.generate_status()
+                        }
+                        Err(e) => {
+                            format!("§R无法发起战斗: {}§N\n[返回:look]", e)
+                        }
+                    };
                 }
             }
         }
+    }
 
-        // 尝试玩家PK（使用PK守护进程）
-        use crate::gamenv::single::daemons::pkd::{PKD, PkMode, CombatStats};
+    // 尝试玩家PK（使用PK守护进程）
+    // 构建挑战者数据
+    let challenger_stats = CombatStats {
+        id: userid.to_string(),
+        name: userid.to_string(),
+        name_cn: userid.to_string(),
+        level: 1,
+        hp: 100,
+        hp_max: 100,
+        mp: 50,
+        mp_max: 50,
+        jing: 100,
+        jing_max: 100,
+        qi: 50,
+        qi_max: 50,
+        attack: 10,
+        defense: 5,
+        dodge: 8,
+        parry: 6,
+        pk_mode: PkMode::Free,
+        pk_value: 0,
+        kill_streak: 0,
+        is_killing: false,
+    };
 
-        // 构建挑战者数据
-        let challenger_stats = CombatStats {
-            id: userid.to_string(),
-            name: userid.to_string(),
-            name_cn: userid.to_string(),
-            level: 1,
-            hp: 100,
-            hp_max: 100,
-            mp: 50,
-            mp_max: 50,
-            jing: 100,
-            jing_max: 100,
-            qi: 50,
-            qi_max: 50,
-            attack: 10,
-            defense: 5,
-            dodge: 8,
-            parry: 6,
-            pk_mode: PkMode::Free,
-            pk_value: 0,
-            kill_streak: 0,
-            is_killing: false,
-        };
+    // 构建防守者数据（从当前房间查找玩家）
+    // TODO: 从房间获取其他玩家数据
+    let defender_stats = CombatStats {
+        id: target.to_string(),
+        name: target.to_string(),
+        name_cn: target.to_string(),
+        level: 1,
+        hp: 100,
+        hp_max: 100,
+        mp: 50,
+        mp_max: 50,
+        jing: 100,
+        jing_max: 100,
+        qi: 50,
+        qi_max: 50,
+        attack: 10,
+        defense: 5,
+        dodge: 8,
+        parry: 6,
+        pk_mode: PkMode::Free,
+        pk_value: 0,
+        kill_streak: 0,
+        is_killing: false,
+    };
 
-        // 构建防守者数据（从当前房间查找玩家）
-        // TODO: 从房间获取其他玩家数据
-        let defender_stats = CombatStats {
-            id: target.to_string(),
-            name: target.to_string(),
-            name_cn: target.to_string(),
-            level: 1,
-            hp: 100,
-            hp_max: 100,
-            mp: 50,
-            mp_max: 50,
-            jing: 100,
-            jing_max: 100,
-            qi: 50,
-            qi_max: 50,
-            attack: 10,
-            defense: 5,
-            dodge: 8,
-            parry: 6,
-            pk_mode: PkMode::Free,
-            pk_value: 0,
-            kill_streak: 0,
-            is_killing: false,
-        };
-
-        // 发起PK挑战
-        match PKD.challenge(challenger_stats, defender_stats).await {
-            Ok(battle) => {
-                battle.generate_status()
-            }
-            Err(e) => {
-                format!("§R{}§N", e)
-            }
-        }
-    } else {
-        format!("§R无法找到当前房间。§N")
+    // 发起PK挑战
+    match PKD.challenge(challenger_stats, defender_stats).await {
+        Ok(battle) => battle.generate_status(),
+        Err(e) => format!("§R{}§N", e),
     }
 }
 
