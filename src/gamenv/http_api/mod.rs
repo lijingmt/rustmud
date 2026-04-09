@@ -174,7 +174,7 @@ async fn build_room_update(userid: &str) -> serde_json::Value {
             }))
         )
     } else {
-        ("newbie_square".to_string(), None)
+        ("xinshoucun/xinshoucunguangchang".to_string(), None)
     };
 
     let world_arc = get_world();
@@ -196,6 +196,34 @@ async fn build_room_update(userid: &str) -> serde_json::Value {
 
         let exits: Vec<String> = room.exits.keys().cloned().collect();
 
+        // 构建带目标房间名称的出口信息
+        let mut exits_with_names = vec![];
+        for (direction, target_room_id) in &room.exits {
+            let target_room = world_guard.get_room(target_room_id);
+            let target_room_name = target_room.map(|r| r.name.clone()).unwrap_or_else(|| "未知".to_string());
+
+            let (direction_cn, arrow) = match direction.as_str() {
+                "north" => ("北".to_string(), "↑".to_string()),
+                "south" => ("南".to_string(), "↓".to_string()),
+                "east" => ("东".to_string(), "→".to_string()),
+                "west" => ("西".to_string(), "←".to_string()),
+                "up" => ("上".to_string(), "↑".to_string()),
+                "down" => ("下".to_string(), "↓".to_string()),
+                "northeast" => ("东北".to_string(), "↗".to_string()),
+                "northwest" => ("西北".to_string(), "↖".to_string()),
+                "southeast" => ("东南".to_string(), "↘".to_string()),
+                "southwest" => ("西南".to_string(), "↙".to_string()),
+                _ => (direction.clone(), "".to_string()),
+            };
+
+            exits_with_names.push(ExitInfo {
+                direction: direction.clone(),
+                direction_cn,
+                arrow,
+                target_room: target_room_name,
+            });
+        }
+
         Some(RoomData {
             id: room.id.clone(),
             name: room.name.clone(),
@@ -203,6 +231,7 @@ async fn build_room_update(userid: &str) -> serde_json::Value {
             long: room.long.clone(),
             npcs,
             exits,
+            exits_with_names,
         })
     } else {
         None
@@ -218,7 +247,7 @@ async fn build_room_update(userid: &str) -> serde_json::Value {
     serde_json::json!({
         "status": "success",
         "action": "room_update",
-        "mud_lines": mud_lines,
+        "lines": mud_lines,
         "room_info": room_info,
         "player_stats": player_stats
     })
@@ -308,7 +337,7 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
             }))
         )
     } else {
-        ("newbie_square".to_string(), None)
+        ("xinshoucun/xinshoucunguangchang".to_string(), None)
     };
 
     let world_arc = get_world();
@@ -330,6 +359,34 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
 
         let exits: Vec<String> = room.exits.keys().cloned().collect();
 
+        // 构建带目标房间名称的出口信息
+        let mut exits_with_names = vec![];
+        for (direction, target_room_id) in &room.exits {
+            let target_room = world_guard.get_room(target_room_id);
+            let target_room_name = target_room.map(|r| r.name.clone()).unwrap_or_else(|| "未知".to_string());
+
+            let (direction_cn, arrow) = match direction.as_str() {
+                "north" => ("北".to_string(), "↑".to_string()),
+                "south" => ("南".to_string(), "↓".to_string()),
+                "east" => ("东".to_string(), "→".to_string()),
+                "west" => ("西".to_string(), "←".to_string()),
+                "up" => ("上".to_string(), "↑".to_string()),
+                "down" => ("下".to_string(), "↓".to_string()),
+                "northeast" => ("东北".to_string(), "↗".to_string()),
+                "northwest" => ("西北".to_string(), "↖".to_string()),
+                "southeast" => ("东南".to_string(), "↘".to_string()),
+                "southwest" => ("西南".to_string(), "↙".to_string()),
+                _ => (direction.clone(), "".to_string()),
+            };
+
+            exits_with_names.push(ExitInfo {
+                direction: direction.clone(),
+                direction_cn,
+                arrow,
+                target_room: target_room_name,
+            });
+        }
+
         Some(RoomData {
             id: room.id.clone(),
             name: room.name.clone(),
@@ -337,6 +394,7 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
             long: room.long.clone(),
             npcs,
             exits,
+            exits_with_names,
         })
     } else {
         None
@@ -356,6 +414,26 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
         parser.parse_output(output)
     };
 
+    // 构建导航按钮数据
+    let navigation = if let Some(ref room_data) = room_info {
+        // 使用 exits_with_names 构建导航按钮
+        let mut exits = vec![];
+        tracing::info!("Building navigation, exits_with_names count: {}", room_data.exits_with_names.len());
+        for exit in &room_data.exits_with_names {
+            exits.push(serde_json::json!({
+                "direction": exit.direction,
+                "label": format!("{}：{}", exit.direction_cn, exit.target_room),
+                "command": format!("go {}", exit.direction)
+            }));
+        }
+        tracing::info!("Navigation built: {} buttons", exits.len());
+        // 返回符合 dist 前端期望的格式: {exits: [...]}
+        serde_json::json!({"exits": exits})
+    } else {
+        tracing::info!("No room_info, navigation empty");
+        serde_json::json!({"exits": []})
+    };
+
     // 构建消息类型（基于命令）
     let msg_type = match command {
         "kill" | "attack" => "combat",
@@ -363,11 +441,12 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
         _ => "info"
     };
 
-    serde_json::json!({
+    let response = serde_json::json!({
         "status": "success",
-        "mud_lines": mud_lines,
+        "lines": mud_lines,
         "room_info": room_info,
         "player_stats": player_stats,
+        "navigation": navigation,
         "messages": [{
             "type": msg_type,
             "text": output
@@ -390,7 +469,14 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
             {"id": "score", "label": "状态", "command": "score", "style": "default"},
             {"id": "skills", "label": "技能", "command": "skills", "style": "default"}
         ]
-    })
+    });
+
+    // 打印完整响应到控制台
+    println!("=== API Response for command '{}' ===", command);
+    println!("Navigation: {}", serde_json::to_string_pretty(&navigation).unwrap_or_default());
+    println!("=== End Response ===");
+
+    response
 }
 
 /// 获取方向中文标签
@@ -648,6 +734,9 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
 
 /// 查看命令
 async fn look_command(world: &crate::gamenv::world::GameWorld, room_id: &str) -> String {
+    tracing::info!("look_command called with room_id: '{}'", room_id);
+    tracing::info!("World has {} rooms loaded", world.room_count());
+
     if let Some(room) = world.get_room(room_id) {
         let mut output = format!("§Y{}§N\n", room.name);
         output.push_str(&format!("{}\n", room.long.trim()));

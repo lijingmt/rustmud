@@ -150,6 +150,7 @@ createApp({
             mudLoading: false,  // MUD加载中状态
             slowLoadingTip: false,  // 慢速加载提示（超过3秒显示）
             loadingTimer: null,  // 加载计时器
+            navigation: [],  // 导航按钮数据
             // 战斗系统
             isInBattle: false,  // 是否处于战斗状态
             battleMiniMode: true,  // 迷你模式：只显示HP条
@@ -970,6 +971,14 @@ createApp({
                 }
                 // 更新MUD输出
                 this.mudLines = data.lines || [];
+                // 更新导航按钮
+                if (data.navigation) {
+                    this.navigation = data.navigation;
+                    console.log('[sendJsonCommand] 导航按钮:', this.navigation);
+                    console.log('[sendJsonCommand] 导航按钮数量:', this.navigation.length);
+                } else {
+                    console.log('[sendJsonCommand] 没有导航数据，data:', data);
+                }
                 console.log('[sendJsonCommand] mudLines数量:', this.mudLines.length);
 
                 // 处理复制指令（从后端返回的copy字段）

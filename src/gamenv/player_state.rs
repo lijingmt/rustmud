@@ -88,7 +88,7 @@ impl PlayerState {
             attack: 15,
             defense: 10,
             gold: 100,
-            current_room: "newbie_square".to_string(),
+            current_room: "xinshoucun/xinshoucunguangchang".to_string(),
             inventory: HashMap::new(),
             inventory_capacity: 20,
             active_quests: Vec::new(),

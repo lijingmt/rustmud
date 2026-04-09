@@ -69,6 +69,8 @@ pub struct MudOutputParser {
     room_npcs: Vec<NpcInfo>,
     /// 当前房间中的出口
     room_exits: Vec<String>,
+    /// 当前房间中的出口（含目标房间名称）
+    room_exits_with_names: Vec<ExitInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +94,41 @@ impl MudOutputParser {
             current_room: None,
             room_npcs: vec![],
             room_exits: vec![],
+            room_exits_with_names: vec![],
+        }
+    }
+
+    /// 将英文方向名转换为中文
+    fn direction_to_chinese(&self, direction: &str) -> String {
+        match direction {
+            "north" => "北".to_string(),
+            "south" => "南".to_string(),
+            "east" => "东".to_string(),
+            "west" => "西".to_string(),
+            "up" => "上".to_string(),
+            "down" => "下".to_string(),
+            "northeast" => "东北".to_string(),
+            "northwest" => "西北".to_string(),
+            "southeast" => "东南".to_string(),
+            "southwest" => "西南".to_string(),
+            _ => direction.to_string(),
+        }
+    }
+
+    /// 获取方向箭头符号
+    fn direction_arrow(&self, direction: &str) -> String {
+        match direction {
+            "north" => "↑".to_string(),
+            "south" => "↓".to_string(),
+            "east" => "→".to_string(),
+            "west" => "←".to_string(),
+            "up" => "↑".to_string(),
+            "down" => "↓".to_string(),
+            "northeast" => "↗".to_string(),
+            "northwest" => "↖".to_string(),
+            "southeast" => "↘".to_string(),
+            "southwest" => "↙".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -275,6 +312,7 @@ impl MudOutputParser {
         });
         self.room_npcs = room_data.npcs.clone();
         self.room_exits = room_data.exits.clone();
+        self.room_exits_with_names = room_data.exits_with_names.clone();
     }
 
     /// 生成房间 JSON 输出（用于 Vue 前端）
@@ -324,13 +362,36 @@ impl MudOutputParser {
             }
 
             // 出口
-            if !self.room_exits.is_empty() {
+            if !self.room_exits_with_names.is_empty() {
                 lines.push(MudLine {
                     r#type: "empty".to_string(),
                     segments: vec![],
                 });
 
-                let exit_text = format!("出口: {}", self.room_exits.join(" "));
+                // 可点击的出口按钮（带方向箭头和目标房间名）
+                for exit_info in &self.room_exits_with_names {
+                    lines.push(MudLine {
+                        r#type: "line".to_string(),
+                        segments: vec![MudSegment {
+                            r#type: SegmentType::Button,
+                            label: Some(format!("{}{}：{}", exit_info.direction_cn, exit_info.arrow, exit_info.target_room)),
+                            cmd: Some(format!("go {}", exit_info.direction)),
+                            class: Some("exit-btn".to_string()),
+                            ..Default::default()
+                        }],
+                    });
+                }
+            } else if !self.room_exits.is_empty() {
+                // 回退到简单显示（如果没有exits_with_names）
+                lines.push(MudLine {
+                    r#type: "empty".to_string(),
+                    segments: vec![],
+                });
+
+                let exit_names: Vec<String> = self.room_exits.iter()
+                    .map(|e| self.direction_to_chinese(e))
+                    .collect();
+                let exit_text = format!("出口: {}", exit_names.join(" "));
                 lines.push(MudLine {
                     r#type: "line".to_string(),
                     segments: vec![MudSegment {
@@ -350,9 +411,11 @@ impl MudOutputParser {
                 // 可点击的出口按钮
                 let mut exit_segments = vec![];
                 for exit in &self.room_exits {
+                    let direction_cn = self.direction_to_chinese(exit);
+                    let arrow = self.direction_arrow(exit);
                     exit_segments.push(MudSegment {
                         r#type: SegmentType::Button,
-                        label: Some(exit.clone()),
+                        label: Some(format!("{}{}", direction_cn, arrow)),
                         cmd: Some(format!("go {}", exit)),
                         class: Some("exit-btn".to_string()),
                         ..Default::default()
@@ -417,6 +480,15 @@ pub struct RoomData {
     pub long: String,
     pub npcs: Vec<NpcInfo>,
     pub exits: Vec<String>,
+    pub exits_with_names: Vec<ExitInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExitInfo {
+    pub direction: String,
+    pub direction_cn: String,
+    pub arrow: String,
+    pub target_room: String,
 }
 
 impl Default for MudSegment {
@@ -449,6 +521,31 @@ impl Default for NpcInfo {
             id: String::new(),
             name: String::new(),
             short: String::new(),
+        }
+    }
+}
+
+impl Default for ExitInfo {
+    fn default() -> Self {
+        Self {
+            direction: String::new(),
+            direction_cn: String::new(),
+            arrow: String::new(),
+            target_room: String::new(),
+        }
+    }
+}
+
+impl Default for RoomData {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            short: String::new(),
+            long: String::new(),
+            npcs: vec![],
+            exits: vec![],
+            exits_with_names: vec![],
         }
     }
 }

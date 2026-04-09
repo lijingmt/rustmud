@@ -556,6 +556,16 @@
                 </div>
             </div>
 
+            <!-- 导航按钮 (东南西北) -->
+            <div class="navigation-bar" v-if="navigation && navigation.length > 0">
+                <button v-for="nav in navigation" :key="nav.direction"
+                        @click="sendJsonCommand(nav.command)"
+                        class="nav-btn"
+                        :title="nav.target">
+                    {{ nav.label }}
+                </button>
+            </div>
+
             <!-- 快捷命令栏 -->
             <footer class="quick-actions" :class="{ collapsed: quickActionsCollapsed }">
                 <button class="quick-toggle-btn" @click="toggleQuickActions" :title="quickActionsCollapsed ? '展开菜单' : '折叠菜单'">
@@ -578,7 +588,7 @@
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=20260409-nav"></script>
     <!-- 翻译插件 - 立即执行初始化 -->
     <script src="../includes/translate.js"></script>
     <script>

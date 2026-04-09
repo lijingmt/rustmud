@@ -32,6 +32,18 @@ pub struct Room {
     /// 危险等级
     #[serde(default)]
     pub danger_level: i32,
+    /// 房间类型 (normal, store, dungeon等)
+    #[serde(default)]
+    pub room_type: String,
+    /// 交互链接
+    #[serde(default)]
+    pub links: String,
+    /// 是否为安全区（不可PK）
+    #[serde(default)]
+    pub is_peaceful: bool,
+    /// 是否为卧室（可休息睡觉）
+    #[serde(default)]
+    pub is_bedroom: bool,
 }
 
 impl Room {
