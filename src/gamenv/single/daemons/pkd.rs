@@ -383,33 +383,33 @@ impl PkBattle {
 
         output.push_str(&format!("§Y回合: {}§N\n\n", self.round));
 
-        // 挑战者状态
-        let challenger_hp_color = if self.challenger.hp_percent() > 50 {
-            "#00ff00"
+        // 挑战者状态 - 使用颜色代码
+        let (challenger_hp_color, challenger_hp_end) = if self.challenger.hp_percent() > 50 {
+            ("§G", "§N")  // 绿色
         } else if self.challenger.hp_percent() > 20 {
-            "#ffff00"
+            ("§Y", "§N")  // 黄色
         } else {
-            "#ff0000"
+            ("§R", "§N")  // 红色
         };
 
         output.push_str(&format!("§Y【挑战者】§N {} (Lv.{})\n",
             self.challenger.name_cn, self.challenger.level));
-        output.push_str(&format!("§Y生命: §{}{}/{}§N\n",
-            challenger_hp_color, self.challenger.hp, self.challenger.hp_max));
+        output.push_str(&format!("§Y生命: {}{}/{}{}\n",
+            challenger_hp_color, self.challenger.hp, self.challenger.hp_max, challenger_hp_end));
 
-        // 防守者状态
-        let defender_hp_color = if self.defender.hp_percent() > 50 {
-            "#00ff00"
+        // 防守者状态 - 使用颜色代码
+        let (defender_hp_color, defender_hp_end) = if self.defender.hp_percent() > 50 {
+            ("§G", "§N")  // 绿色
         } else if self.defender.hp_percent() > 20 {
-            "#ffff00"
+            ("§Y", "§N")  // 黄色
         } else {
-            "#ff0000"
+            ("§R", "§N")  // 红色
         };
 
         output.push_str(&format!("\n§R【防守者】§N {} (Lv.{})\n",
             self.defender.name_cn, self.defender.level));
-        output.push_str(&format!("§R生命: §{}{}/{}§N\n",
-            defender_hp_color, self.defender.hp, self.defender.hp_max));
+        output.push_str(&format!("§R生命: {}{}/{}{}\n",
+            defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end));
 
         // 战斗日志
         if !self.combat_log.is_empty() {
