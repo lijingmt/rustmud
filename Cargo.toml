@@ -38,6 +38,9 @@ tower-http = { version = "0.6", features = ["cors", "fs", "compression-gzip"] }
 # 模板引擎 - 对应 VIEW 系统 (暂时注释，后续可集成)
 # rinja = { version = "0.4", features = ["with-axum"] }
 
+# 静态全局变量 - 用于命令注册表
+lazy_static = "1.5"
+
 # 工具库
 chrono = "0.4"
 uuid = { version = "1.11", features = ["v4", "serde"] }

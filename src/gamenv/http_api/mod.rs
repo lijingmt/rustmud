@@ -9,12 +9,14 @@ pub mod utils;
 pub mod handlers;
 pub mod thread_manager;
 pub mod mud_output;
+pub mod commands;
 
 pub use auth::*;
 pub use virtual_conn::*;
 pub use command_queue::*;
 pub use config::*;
 pub use mud_output::*;
+pub use commands::*;
 
 use axum::{
     extract::{State, WebSocketUpgrade, ws::Message, Query},
@@ -712,32 +714,8 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             format!("{}说: {}", userid, msg)
         }
         "help" => {
-            r#"
-§H可用命令:§N
-§C【基础】§N
-  look/l - 查看周围环境
-  north/n, south/s, east/e, west/w, up/u, down/d - 移动
-
-§C【互动】§N
-  talk <npc> - 与NPC对话
-  ask <npc> <option> - 选择对话选项
-  kill <monster> - 攻击怪物
-
-§C【角色】§N
-  inventory/i - 查看背包
-  equipment/eq - 查看装备
-  score - 查看状态
-  skills - 查看技能
-
-§C【社交】§N
-  who - 查看在线玩家
-  say <message> - 说话
-  tell <player> <message> - 悄悄话
-
-§C【系统】§N
-  help - 显示帮助
-  save - 保存进度
-"#.to_string()
+            // 使用命令注册表生成帮助文本
+            COMMAND_REGISTRY.lock().unwrap().help_text()
         }
         "equipment" | "eq" => {
             "§Y当前装备:§N\n\n§H武器:§N 新手木剑 (攻击+5)\n§H衣服:§N 新手布衣 (防御+3)\n§H饰品:§N 无".to_string()
