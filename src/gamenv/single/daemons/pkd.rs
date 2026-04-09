@@ -421,12 +421,15 @@ impl PkBattle {
 /// PK守护进程
 pub struct PkDaemon {
     battles: Arc<RwLock<HashMap<String, PkBattle>>>,
+    // 玩家ID -> 战斗ID 映射（用于快速查找玩家所在的战斗）
+    player_battles: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl PkDaemon {
     pub fn new() -> Self {
         Self {
             battles: Arc::new(RwLock::new(HashMap::new())),
+            player_battles: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -452,11 +455,17 @@ impl PkDaemon {
         let battle_id = battle.battle_id.clone();
 
         let mut battles = self.battles.write().await;
-        battles.insert(battle_id.clone(), battle.clone());
-        battles.insert(challenger_id, battle.clone());
-        battles.insert(defender_id, battle.clone());
+        let mut player_battles = self.player_battles.write().await;
 
-        Ok(battle)
+        // 建立玩家ID -> 战斗ID 的映射
+        player_battles.insert(challenger_id, battle_id.clone());
+        player_battles.insert(defender_id, battle_id.clone());
+
+        // 只用 battle_id 存储战斗（最后插入，因为battle会被移动）
+        battles.insert(battle_id.clone(), battle);
+
+        // 由于battle被移动，我们无法返回它，需要重新获取
+        Ok(battles.get(&battle_id).unwrap().clone())
     }
 
     /// 获取战斗
@@ -466,7 +475,12 @@ impl PkDaemon {
 
     /// 获取玩家当前的战斗
     pub async fn get_player_battle(&self, player_id: &str) -> Option<PkBattle> {
-        self.battles.read().await.get(player_id).cloned()
+        let player_battles = self.player_battles.read().await;
+        if let Some(battle_id) = player_battles.get(player_id) {
+            self.battles.read().await.get(battle_id).cloned()
+        } else {
+            None
+        }
     }
 
     /// 执行下一个回合
@@ -487,22 +501,30 @@ impl PkDaemon {
     /// 结束战斗
     pub async fn end_battle(&self, battle_id: &str) -> Option<PkBattle> {
         let mut battles = self.battles.write().await;
-        battles.remove(battle_id)
+        let mut player_battles = self.player_battles.write().await;
+
+        if let Some(battle) = battles.remove(battle_id) {
+            // 清理玩家映射
+            player_battles.remove(&battle.challenger.id);
+            player_battles.remove(&battle.defender.id);
+            Some(battle)
+        } else {
+            None
+        }
     }
 
     /// 玩家逃跑
     pub async fn escape(&self, player_id: &str) -> Result<String, String> {
-        // 先克隆需要的battle数据
-        let (battle_id, challenger_id, defender_id, dodge_a, dodge_d) = {
-            let battles = self.battles.read().await;
-            if let Some(battle) = battles.get(player_id) {
-                (
-                    battle.battle_id.clone(),
-                    battle.challenger.id.clone(),
-                    battle.defender.id.clone(),
-                    battle.challenger.dodge,
-                    battle.defender.dodge,
-                )
+        // 获取战斗数据
+        let (battle, dodge_a, dodge_d) = {
+            let player_battles = self.player_battles.read().await;
+            if let Some(battle_id) = player_battles.get(player_id) {
+                let battles = self.battles.read().await;
+                if let Some(battle) = battles.get(battle_id) {
+                    (battle.clone(), battle.challenger.dodge, battle.defender.dodge)
+                } else {
+                    return Err("你不在战斗中！".to_string());
+                }
             } else {
                 return Err("你不在战斗中！".to_string());
             }
@@ -513,10 +535,7 @@ impl PkDaemon {
 
         if rand::random::<f64>() < success_rate * 0.8 {
             // 逃跑成功 - 移除战斗
-            let mut battles = self.battles.write().await;
-            battles.remove(&challenger_id);
-            battles.remove(&defender_id);
-            battles.remove(&battle_id);
+            self.end_battle(&battle.battle_id).await;
             Ok("§Y你成功逃脱了！§N".to_string())
         } else {
             Err("§R你逃跑失败了！§N".to_string())
@@ -525,16 +544,16 @@ impl PkDaemon {
 
     /// 投降
     pub async fn surrender(&self, player_id: &str) -> Result<String, String> {
-        // 先克隆需要的battle数据
-        let (battle_id, challenger_id, defender_id, is_challenger) = {
-            let battles = self.battles.read().await;
-            if let Some(battle) = battles.get(player_id) {
-                (
-                    battle.battle_id.clone(),
-                    battle.challenger.id.clone(),
-                    battle.defender.id.clone(),
-                    battle.challenger.id == player_id,
-                )
+        // 获取战斗数据
+        let (battle, is_challenger) = {
+            let player_battles = self.player_battles.read().await;
+            if let Some(battle_id) = player_battles.get(player_id) {
+                let battles = self.battles.read().await;
+                if let Some(battle) = battles.get(battle_id) {
+                    (battle.clone(), battle.challenger.id == player_id)
+                } else {
+                    return Err("你不在战斗中！".to_string());
+                }
             } else {
                 return Err("你不在战斗中！".to_string());
             }
@@ -542,10 +561,7 @@ impl PkDaemon {
 
         if is_challenger {
             // 移除战斗
-            let mut battles = self.battles.write().await;
-            battles.remove(&challenger_id);
-            battles.remove(&defender_id);
-            battles.remove(&battle_id);
+            self.end_battle(&battle.battle_id).await;
             Ok("§Y你投降了！§N".to_string())
         } else {
             Err("只有发起者可以投降！".to_string())

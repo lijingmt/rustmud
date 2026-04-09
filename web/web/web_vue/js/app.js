@@ -147,7 +147,18 @@ createApp({
             // JSON模式 (vue-ui-3: 无iframe，Vue直接渲染)
             useJsonMode: true,  // 使用JSON模式代替iframe
             mudLines: [],  // MUD输出行数组
+            parsedMudLinesData: [],  // 解析后的MUD行数据（用于模板渲染）
             mudLoading: false,  // MUD加载中状态
+            slowLoadingTip: false,  // 慢速加载提示（超过3秒显示）
+            loadingTimer: null,  // 加载计时器
+            navigation: [],  // 导航按钮数据
+            // state object for template binding
+            state: {
+                player: null,
+                messages: [],
+                actions: [],
+                navigation: { exits: [] }
+            },
             // 战斗系统
             isInBattle: false,  // 是否处于战斗状态
             battleMiniMode: true,  // 迷你模式：只显示HP条
@@ -165,13 +176,53 @@ createApp({
             performsData: null,  // 招式数据
             performsLoading: false,  // 招式加载中
             // 快捷菜单
-            quickActionsCollapsed: false  // 快捷菜单是否折叠
+            quickActionsCollapsed: false,  // 快捷菜单是否折叠
+            // 邀请系统
+            refCode: '',  // 推荐人邀请码（从URL参数ref获取）
+            showInviteModal: false,  // 显示邀请弹窗
+            inviteLink: '',  // 邀请链接
+            inviteCode: '',  // 邀请码
+            qrCodeUrl: '',  // 二维码URL
+            // 语言选择
+            selectedLanguage: localStorage.getItem('userLanguage') || 'chinese_simplified'  // 当前选择的语言
         };
+    },
+
+    computed: {
+        // inputCommand 与 commandInput 双向绑定
+        inputCommand: {
+            get() {
+                return this.commandInput;
+            },
+            set(value) {
+                this.commandInput = value;
+            }
+        },
+        // isLoading 与 mudLoading 同步
+        isLoading() {
+            return this.mudLoading;
+        },
+        // connectionStatus
+        connectionStatus() {
+            return this.showLogin ? '未连接' : '已连接';
+        },
+        // MUD 容器高度
+        mudContainerHeight() {
+            return Math.max(300, window.innerHeight - 200);
+        },
+        // 解析 MUD 行为可渲染的格式 - 返回数据属性
+        parsedMudLines() {
+            console.log('[parsedMudLines computed] called, returning parsedMudLinesData:', this.parsedMudLinesData.length);
+            return this.parsedMudLinesData;
+        }
     },
 
     watch: {
         // 监听 mudLines 变化，更新后重新翻译并滚动到顶部
-        mudLines() {
+        mudLines(newLines) {
+            console.log('[watch mudLines] triggered, count:', newLines?.length);
+            // 更新解析后的 MUD 行数据
+            this.updateParsedMudLines();
             this.$nextTick(() => {
                 this.reapplyTranslation();
                 // 每次更新后滚动到顶部
@@ -186,6 +237,142 @@ createApp({
     },
 
     methods: {
+        // 更新解析后的 MUD 行数据
+        updateParsedMudLines() {
+            console.log('[updateParsedMudLines] called, mudLines:', this.mudLines?.length);
+            const lines = [];
+
+            if (this.mudLines && this.mudLines.length > 0) {
+                for (const mudLine of this.mudLines) {
+                    // 空行
+                    if (mudLine.type === 'empty' || !mudLine.segments || mudLine.segments.length === 0) {
+                        lines.push({ isEmpty: true });
+                        continue;
+                    }
+
+                    const segments = [];
+                    for (const seg of mudLine.segments) {
+                        // 按钮类型（导航、NPC等）
+                        if (seg.type === 'button') {
+                            // 获取命令，如果是 go direction 格式，转换为纯方向
+                            let cmd = seg.cmd || seg.command || seg.label || '';
+                            if (cmd.startsWith('go ')) {
+                                cmd = cmd.substring(3); // 去掉 "go " 前缀
+                            }
+                            // 使用后端返回的 class，如果没有则使用 getButtonStyle
+                            let buttonClass = seg.class || this.getButtonStyle(seg.label || '');
+                            // 如果后端返回的是 Bootstrap 类名，转换为我们的格式
+                            if (buttonClass.startsWith('btn-')) {
+                                // 直接使用后端返回的类名
+                            } else if (!buttonClass.startsWith('btn-outline-')) {
+                                buttonClass = 'btn-outline-' + buttonClass;
+                            }
+
+                            // 解析按钮文本和颜色
+                            let buttonText = '';
+                            let buttonParts = [];
+                            if (seg.parts && seg.parts.length > 0) {
+                                // 使用后端解析的颜色 parts
+                                for (const part of seg.parts) {
+                                    if (part.text) {
+                                        const cleanText = part.text.replace(/§[A-Za-z0-9]/g, '');
+                                        if (cleanText) {
+                                            buttonText += cleanText;
+                                            buttonParts.push({
+                                                text: cleanText,
+                                                color: part.color || null,
+                                                bold: part.bold || false
+                                            });
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 后端没有提供 parts，自己解析颜色
+                                buttonText = (seg.label || seg.text || '按钮').replace(/§[A-Za-z0-9]/g, '');
+                                buttonParts.push({
+                                    text: buttonText,
+                                    color: null,
+                                    bold: false
+                                });
+                            }
+
+                            segments.push({
+                                text: buttonText,
+                                isButton: true,
+                                buttonClass: buttonClass,
+                                command: cmd,
+                                parts: buttonParts  // 保存颜色 parts 用于渲染
+                            });
+                        }
+                        // 链接类型
+                        else if (seg.type === 'link') {
+                            let cmd = seg.cmd || seg.command || seg.label || '';
+                            if (cmd.startsWith('go ')) {
+                                cmd = cmd.substring(3);
+                            }
+                            let buttonClass = seg.class || this.getButtonStyle(seg.label || '');
+                            if (buttonClass.startsWith('btn-')) {
+                                // 直接使用后端返回的类名
+                            } else if (!buttonClass.startsWith('btn-outline-')) {
+                                buttonClass = 'btn-outline-' + buttonClass;
+                            }
+                            segments.push({
+                                text: seg.label || seg.text || '链接',
+                                isButton: true,
+                                buttonClass: buttonClass,
+                                command: cmd
+                            });
+                        }
+                        // 文本类型 - 检查 parts 数组（带颜色）
+                        else if (seg.type === 'text' && seg.parts && seg.parts.length > 0) {
+                            // 保留每个 part 的颜色信息
+                            for (const part of seg.parts) {
+                                if (part.text) {
+                                    // 移除 § 颜色代码（后端已解析到 color 属性）
+                                    const cleanText = part.text.replace(/§[A-Za-z0-9]/g, '').replace(/\\n/g, '\n');
+                                    if (cleanText.trim()) {
+                                        segments.push({
+                                            text: cleanText,
+                                            isButton: false,
+                                            color: part.color || null,
+                                            bold: part.bold || false
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        // 其他类型 - 直接使用 text 属性
+                        else if (seg.text) {
+                            // 移除颜色代码
+                            const cleanText = seg.text.replace(/§[A-Za-z0-9]/g, '').replace(/\\n/g, '\n');
+                            if (cleanText.trim()) {
+                                segments.push({
+                                    text: cleanText,
+                                    isButton: false,
+                                    color: null,
+                                    bold: false
+                                });
+                            }
+                        }
+                    }
+
+                    if (segments.length > 0) {
+                        lines.push({ isEmpty: false, segments });
+                    }
+                }
+            }
+
+            if (lines.length === 0) {
+                lines.push({ isEmpty: false, segments: [{ text: '正在加载...', isButton: false }] });
+            }
+
+            this.parsedMudLinesData = lines;
+            console.log('[updateParsedMudLines] updated parsedMudLinesData:', lines.length);
+            console.log('[updateParsedMudLines] sample:', lines[0]);
+            // 强制触发 Vue 更新
+            this.$forceUpdate();
+        },
+
         // 重新应用翻译（用于 mudLines 更新后）
         reapplyTranslation() {
             const savedLang = localStorage.getItem('userLanguage');
@@ -195,11 +382,182 @@ createApp({
             }
         },
 
+        // 获取导航图标
+        getNavIcon(label) {
+            if (!label) return '→';
+            if (label.includes('北')) return '↑';
+            if (label.includes('南')) return '↓';
+            if (label.includes('东')) return '→';
+            if (label.includes('西')) return '←';
+            if (label.includes('上')) return '↑';
+            if (label.includes('下')) return '↓';
+            return '→';
+        },
+
+        // 获取按钮样式
+        getButtonStyle(text) {
+            if (!text) return 'btn-outline-info';
+            if (text.includes('北') || text.includes('南') ||
+                text.includes('东') || text.includes('西') ||
+                text.includes('上') || text.includes('下')) {
+                return 'btn-outline-success';
+            }
+            if (text.includes('商城') || text.includes('拍卖') || text.includes('杀戮')) {
+                return 'btn-outline-warning';
+            }
+            if (text.includes('吃药')) {
+                return 'btn-outline-purple';
+            }
+            return 'btn-outline-info';
+        },
+
+        // 获取按钮命令（返回纯方向，不带 go 前缀）
+        getButtonCommand(text) {
+            if (!text) return '';
+            if (text.includes('北')) return 'north';
+            if (text.includes('南')) return 'south';
+            if (text.includes('东')) return 'east';
+            if (text.includes('西')) return 'west';
+            if (text.includes('上')) return 'up';
+            if (text.includes('下')) return 'down';
+            // 如果命令以 go 开头，去掉前缀
+            if (text.startsWith('go ')) {
+                return text.substring(3);
+            }
+            return text;
+        },
+
+        // 渲染带颜色代码的文本
+        renderColoredText(text) {
+            if (!text) return '';
+            // 简单的颜色代码映射
+            const colorMap = {
+                '§R': '#ff6b6b',  // 红色
+                '§G': '#51cf66',  // 绿色
+                '§Y': '#ffd43b',  // 黄色
+                '§B': '#4dabf5',  // 蓝色
+                '§M': '#cc5de8',  // 紫色
+                '§C': '#22b8cf',  // 青色
+                '§W': '#ffffff',  // 白色
+                '§H': '#ffe066',  // 金色/高亮
+                '§N': ''          // 重置
+            };
+            let result = text;
+            // 移除颜色代码，返回纯文本（可以后续添加HTML渲染）
+            for (const [code, color] of Object.entries(colorMap)) {
+                result = result.replace(new RegExp(code, 'g'), '');
+            }
+            return result;
+        },
+
+        // 解析消息文本，返回HTML
+        renderMessage(msg) {
+            if (!msg || !msg.text) return '';
+            return this.renderColoredText(msg.text);
+        },
+
+        // 获取当前房间的显示文本
+        getRoomDisplay() {
+            if (!this.state.messages || this.state.messages.length === 0) {
+                return '正在加载...';
+            }
+            const firstMsg = this.state.messages[0];
+            if (!firstMsg || !firstMsg.text) return '';
+            // 简化：返回纯文本
+            return this.renderColoredText(firstMsg.text).split('\\n')[0];
+        },
+
+        // 解析单行 MUD 输出，返回 segments 数组
+        parseMudLine(line) {
+            if (!line || line.trim() === '') {
+                return { isEmpty: true };
+            }
+
+            const segments = [];
+            let remaining = line;
+
+            // 匹配按钮模式: [命令] 或 **命令**
+            const buttonPattern = /\*\*([^*]+)\*\*/g;
+            let lastIndex = 0;
+            let match;
+
+            while ((match = buttonPattern.exec(line)) !== null) {
+                // 添加按钮前的文本
+                if (match.index > lastIndex) {
+                    const textBefore = line.substring(lastIndex, match.index);
+                    if (textBefore.trim()) {
+                        segments.push({
+                            text: textBefore,
+                            isButton: false
+                        });
+                    }
+                }
+
+                // 添加按钮
+                const buttonText = match[1];
+                let buttonClass = 'btn-outline-info';
+                let command = buttonText;
+
+                // 根据按钮内容确定样式和命令
+                if (buttonText.includes('北') || buttonText.includes('南') ||
+                    buttonText.includes('东') || buttonText.includes('西') ||
+                    buttonText.includes('上') || buttonText.includes('下')) {
+                    buttonClass = 'btn-outline-success';
+                    command = 'go ' + this.getDirectionFromText(buttonText);
+                } else if (buttonText.includes('商城') || buttonText.includes('拍卖')) {
+                    buttonClass = 'btn-outline-warning';
+                } else if (buttonText.includes('吃药')) {
+                    buttonClass = 'btn-outline-purple';
+                }
+
+                segments.push({
+                    text: buttonText,
+                    isButton: true,
+                    buttonClass: buttonClass,
+                    command: command
+                });
+
+                lastIndex = buttonPattern.lastIndex;
+            }
+
+            // 添加剩余文本
+            if (lastIndex < line.length) {
+                const textAfter = line.substring(lastIndex);
+                if (textAfter.trim()) {
+                    segments.push({
+                        text: textAfter,
+                        isButton: false
+                    });
+                }
+            }
+
+            // 如果没有找到任何按钮，整行作为文本
+            if (segments.length === 0) {
+                segments.push({
+                    text: line,
+                    isButton: false
+                });
+            }
+
+            return { isEmpty: false, segments };
+        },
+
+        // 从按钮文本中提取方向
+        getDirectionFromText(text) {
+            if (text.includes('北')) return 'north';
+            if (text.includes('南')) return 'south';
+            if (text.includes('东')) return 'east';
+            if (text.includes('西')) return 'west';
+            if (text.includes('上')) return 'up';
+            if (text.includes('下')) return 'down';
+            return 'north';
+        },
+
         detectApiBase() {
             const hostname = window.location.hostname;
             const protocol = window.location.protocol;
-            // 从环境变量获取API端口，构建时会被替换为实际端口
-            const apiPort = '8888';
+            // API端口 - 容器启动时会被sed替换为实际端口
+            const apiPort = '8081';
 
             // localhost 始终使用配置的端口
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -329,13 +687,21 @@ createApp({
                 const challengeData = await challengeResp.json();
                 const challenge = challengeData.challenge;
 
-                // 使用challenge对密码进行哈希
-                const passwordHash = await sha256(challenge + this.registerForm.password);
+                // 注册时发送明文密码（与老用户保持一致，以便老界面登录）
+                // 登录时才使用 challenge 哈希验证
+                const plainPassword = this.registerForm.password;
 
-                // 发送注册命令: login_regnew gamenv fullUserid passwordHash challenge sessionId
+                // 发送注册命令: login_regnew gamenv fullUserid plainPassword sessionId challenge
                 // 注意：注册不需要txd，直接发送cmd参数
-                const cmd = `login_regnew gamenv ${fullUserid} ${passwordHash} ${sessionId} ${challenge}`;
-                const url = this.apiBase + '/api/html?cmd=' + encodeURIComponent(cmd);
+                const cmd = `login_regnew gamenv ${fullUserid} ${plainPassword} ${sessionId} ${challenge}`;
+                let url = this.apiBase + '/api/html?cmd=' + encodeURIComponent(cmd);
+
+                // 如果有推荐码，添加到URL参数
+                const refCode = this.refCode || localStorage.getItem('ref_code');
+                if (refCode) {
+                    url += '&ref=' + encodeURIComponent(refCode);
+                    console.log('使用推荐码:', refCode);
+                }
 
                 console.log('=== 注册请求开始 ===');
                 console.log('apiBase:', this.apiBase);
@@ -392,25 +758,15 @@ createApp({
             try {
                 const fullUserid = this.loginForm.partition + this.loginForm.userid;
 
-                // 获取challenge用于密码哈希
-                const challengeResp = await fetch(this.apiBase + '/api/challenge');
-                if (!challengeResp.ok) {
-                    this.loginError = '获取安全挑战失败';
-                    return;
-                }
-                const challengeData = await challengeResp.json();
-                const challenge = challengeData.challenge;
-
-                // 使用challenge对密码进行哈希
-                const passwordHash = await sha256(challenge + this.loginForm.password);
+                // 使用明文密码（不再使用challenge哈希）
+                const plainPassword = this.loginForm.password;
 
                 if (this.useJsonMode) {
                     // JSON模式: 使用 /api/json 接口登录
                     const params = new URLSearchParams({
                         userid: fullUserid,
-                        password: passwordHash,
-                        challenge: challenge,
-                        cmd: 'init'
+                        password: plainPassword,
+                        cmd: 'look'
                     });
 
                     const response = await fetch(this.apiBase + '/api/json?' + params.toString(), {
@@ -438,12 +794,26 @@ createApp({
                     if (data.txd) {
                         this.txd = data.txd;
                     }
-                    localStorage.setItem('mud_txd', this.txd);
-                    localStorage.setItem('mud_partition', this.loginForm.partition);
-                    localStorage.setItem('mud_userid', this.loginForm.userid);
+                    sessionStorage.setItem('mud_txd', this.txd);
+                    sessionStorage.setItem('mud_partition', this.loginForm.partition);
+                    sessionStorage.setItem('mud_userid', this.loginForm.userid);
+
+                    // 保存当前域名到后端
+                    this.saveGameBaseUrl();
 
                     // 更新MUD输出
                     this.mudLines = data.lines || [];
+
+                    // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
+                    if (data.state) {
+                        this.state = {
+                            player: data.state.player || this.state.player,
+                            messages: data.state.messages || this.state.messages,
+                            actions: data.state.actions || this.state.actions,
+                            navigation: data.state.navigation || this.state.navigation
+                        };
+                        console.log('[Login] State updated, messages count:', this.state.messages.length);
+                    }
 
                     // 隐藏登录界面
                     this.showLogin = false;
@@ -454,8 +824,7 @@ createApp({
                     // iframe模式: 使用 /api/html 接口
                     const params = new URLSearchParams({
                         userid: fullUserid,
-                        password: passwordHash,
-                        challenge: challenge,
+                        password: plainPassword,
                         cmd: 'look'
                     });
 
@@ -481,9 +850,9 @@ createApp({
 
                     // 登录成功，生成 txd 用于后续请求
                     this.txd = this.encodeTxd(fullUserid, this.loginForm.password);
-                    localStorage.setItem('mud_txd', this.txd);
-                    localStorage.setItem('mud_partition', this.loginForm.partition);
-                    localStorage.setItem('mud_userid', this.loginForm.userid);
+                    sessionStorage.setItem('mud_txd', this.txd);
+                    sessionStorage.setItem('mud_partition', this.loginForm.partition);
+                    sessionStorage.setItem('mud_userid', this.loginForm.userid);
 
                     // 设置iframe URL
                     this.gameFrameUrl = this.getGameFrameUrl();
@@ -599,6 +968,129 @@ createApp({
             }
         },
 
+        // ========== 邀请系统相关方法 ==========
+
+        // 保存游戏基础URL到后端（登录时自动调用）
+        async saveGameBaseUrl() {
+            if (!this.txd) return;
+
+            const baseUrl = window.location.protocol + '//' + window.location.host;
+
+            try {
+                const params = new URLSearchParams({
+                    txd: this.txd,
+                    url: baseUrl
+                });
+
+                const response = await fetch(this.apiBase + '/api/invite/seturl?' + params.toString(), {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    console.log('游戏基础URL已保存:', baseUrl);
+                }
+            } catch (e) {
+                console.warn('保存游戏URL失败:', e);
+            }
+        },
+
+        // 显示邀请弹窗
+        showInviteModal() {
+            // 获取完整的用户名（分区+账号）
+            let username = '';
+            if (this.txd) {
+                // 从txd解析用户名：txd格式为 "tx01userid:timestamp:hash"
+                const txdParts = this.txd.split(':');
+                if (txdParts[0]) {
+                    username = txdParts[0];
+                }
+            }
+
+            // 如果没有txd，尝试从登录表单获取
+            if (!username && this.loginForm.partition && this.loginForm.userid) {
+                username = this.loginForm.partition + this.loginForm.userid;
+            }
+
+            // 生成邀请链接 - 使用当前页面路径
+            const baseUrl = window.location.protocol + '//' + window.location.host + window.location.pathname;
+            this.inviteCode = username;
+            this.inviteLink = baseUrl + '?ref=' + username;
+            console.log('邀请链接生成:', {
+                username: username,
+                inviteCode: this.inviteCode,
+                inviteLink: this.inviteLink,
+                baseUrl: baseUrl
+            });
+
+            // 生成二维码URL
+            this.qrCodeUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(this.inviteLink);
+
+            this.showInviteModal = true;
+        },
+
+        // 关闭邀请弹窗
+        closeInviteModal() {
+            this.showInviteModal = false;
+        },
+
+        // 复制邀请码
+        copyInviteCode() {
+            const code = this.inviteCode;
+            if (!code) {
+                alert('请先登录');
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(() => {
+                    alert('邀请码已复制！');
+                }).catch(() => {
+                    this.fallbackCopy(code);
+                });
+            } else {
+                this.fallbackCopy(code);
+            }
+        },
+
+        // 复制邀请链接
+        copyInviteLink() {
+            if (!this.inviteLink) {
+                alert('请先登录');
+                return;
+            }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(this.inviteLink).then(() => {
+                    alert('邀请链接已复制！');
+                }).catch(() => {
+                    this.fallbackCopy(this.inviteLink);
+                });
+            } else {
+                this.fallbackCopy(this.inviteLink);
+            }
+        },
+
+        // 备用复制方法（使用textarea）
+        fallbackCopy(text) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                alert('已复制！');
+            } catch (e) {
+                alert('复制失败，请手动复制');
+            }
+            document.body.removeChild(textarea);
+        },
+
+        // 查看邀请统计（调用游戏内命令）
+        viewInviteStats() {
+            this.closeInviteModal();
+            this.sendQuickCommand('invite stats');
+        },
+
         // 加载聊天消息
         async loadChatMessages() {
             // 只在聊天室打开时才加载
@@ -661,21 +1153,25 @@ createApp({
         },
 
         // 发送命令
-        sendCommand() {
-            const cmd = this.commandInput.trim();
-            if (!cmd) return;
+        sendCommand(cmd = null) {
+            // 如果没有传入命令，从输入框获取
+            const command = cmd || this.commandInput.trim();
+            if (!command) return;
 
             // JSON模式优先
             if (this.useJsonMode) {
-                this.lastCommand = cmd;
-                this.sendJsonCommand(cmd);
-                this.commandInput = '';
-                this.showCommandInput = false;
+                this.lastCommand = command;
+                this.sendJsonCommand(command);
+                // 只有从输入框发送时才清空
+                if (!cmd) {
+                    this.commandInput = '';
+                    this.showCommandInput = false;
+                }
             } else if (this.useAsyncMode) {
                 this.sendCommandAsync();
             } else {
                 // 同步模式（原有方式）
-                const url = `${this.apiBase}/api/html?txd=${encodeURIComponent(this.txd)}&cmd=${encodeURIComponent(cmd)}`;
+                const url = `${this.apiBase}/api/html?txd=${encodeURIComponent(this.txd)}&cmd=${encodeURIComponent(command)}`;
                 const iframe = this.$refs.gameFrame;
                 if (iframe) {
                     this.frameLoading = true;
@@ -743,6 +1239,13 @@ createApp({
 
         // JSON模式: 发送命令并获取结构化数据
         async sendJsonCommand(cmd, isRetry = false) {
+            // 拦截复制邀请链接命令 - 直接在前端处理，不发送到服务器
+            if (cmd && cmd.startsWith('copy_invite_url:')) {
+                const url = cmd.substring('copy_invite_url:'.length);
+                await this.copyToClipboard(decodeURIComponent(url), '邀请链接');
+                return;  // 不发送到服务器
+            }
+
             // 滚动到顶部（同时滚动window和MUD容器）
             window.scrollTo({ top: 0, behavior: 'smooth' });
             const mudContainer = document.querySelector('.mud-output-container');
@@ -754,7 +1257,20 @@ createApp({
             console.log('[sendJsonCommand] apiBase:', this.apiBase);
             console.log('[sendJsonCommand] txd:', this.txd);
 
+            // 清除之前的计时器
+            if (this.loadingTimer) {
+                clearTimeout(this.loadingTimer);
+            }
+
             this.mudLoading = true;
+            this.slowLoadingTip = false;
+
+            // 3秒后显示慢速加载提示
+            this.loadingTimer = setTimeout(() => {
+                if (this.mudLoading) {
+                    this.slowLoadingTip = true;
+                }
+            }, 3000);
             try {
                 const url = `${this.apiBase}/api/json?txd=${encodeURIComponent(this.txd)}&cmd=${encodeURIComponent(cmd)}`;
                 console.log('[sendJsonCommand] 完整URL:', url);
@@ -795,16 +1311,71 @@ createApp({
                 // 更新txd（可能已变化）
                 if (data.txd) {
                     this.txd = data.txd;
-                    localStorage.setItem('mud_txd', this.txd);
+                    sessionStorage.setItem('mud_txd', this.txd);
+                    // 更新浏览器URL，添加txd参数用于分享
+                    const newUrl = new URL(window.location.href);
+                    newUrl.searchParams.set('txd', this.txd);
+                    window.history.replaceState({}, '', newUrl.toString());
+                    console.log('[sendJsonCommand] 已更新URL，添加txd参数');
+                }
+                // 保存userid到sessionStorage（用于URL登录后保存用户信息）
+                if (data.userid && !sessionStorage.getItem('mud_userid')) {
+                    const partitionMatch = data.userid.match(/^([a-z]+\d+)/);
+                    if (partitionMatch) {
+                        const partition = partitionMatch[1];
+                        const userid = data.userid.substring(partition.length);
+                        sessionStorage.setItem('mud_partition', partition);
+                        sessionStorage.setItem('mud_userid', userid);
+                        this.loginForm.partition = partition;
+                        this.loginForm.userid = userid;
+                        console.log('[sendJsonCommand] 已保存用户信息到sessionStorage:', partition, userid);
+                    }
                 }
                 // 更新MUD输出
                 this.mudLines = data.lines || [];
+                console.log('[Login] mudLines updated, count:', this.mudLines.length);
+                console.log('[Login] mudLines[0]:', this.mudLines[0]);
+
+                // 强制触发 Vue 响应式更新
+                this.$forceUpdate();
+
+                // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
+                if (data.state) {
+                    this.state = {
+                        player: data.state.player || this.state.player,
+                        messages: data.state.messages || this.state.messages,
+                        actions: data.state.actions || this.state.actions,
+                        navigation: data.state.navigation || this.state.navigation
+                    };
+                    console.log('[sendJsonCommand] State updated, messages count:', this.state.messages.length);
+                }
+
+                // 更新导航按钮（兼容旧代码）
+                if (data.state && data.state.navigation) {
+                    this.navigation = data.state.navigation.exits || [];
+                } else if (data.navigation) {
+                    this.navigation = data.navigation;
+                }
+                console.log('[sendJsonCommand] 导航按钮:', this.navigation);
                 console.log('[sendJsonCommand] mudLines数量:', this.mudLines.length);
+
+                // 处理复制指令（从后端返回的copy字段）
+                if (data.copy && data.copy.data) {
+                    const copyData = data.copy;
+                    const label = copyData.type === 'code' ? '邀请码' : '邀请链接';
+                    await this.copyToClipboard(copyData.data, label);
+                }
 
                 // 检测战斗状态
                 this.checkBattleStatus();
                 // 解析战斗动作并生成动画
                 this.parseBattleActions(data.lines || []);
+
+                // 检测并处理复制命令（从lines中检测，兼容旧方式）
+                this.handleCopyCommands(data.lines || []);
+
+                // 处理邀请链接占位符 - 动态生成URL
+                this.processInviteLinkPlaceholder();
             } catch (e) {
                 console.error('JSON命令执行失败:', e);
                 // 网络错误也尝试重新登录并重试
@@ -819,6 +1390,11 @@ createApp({
                 }
             } finally {
                 this.mudLoading = false;
+                this.slowLoadingTip = false;
+                if (this.loadingTimer) {
+                    clearTimeout(this.loadingTimer);
+                    this.loadingTimer = null;
+                }
             }
         },
 
@@ -896,16 +1472,17 @@ createApp({
             // 使用与当前页面相同的协议和主机名
             const protocol = window.location.protocol;
             const hostname = window.location.hostname;
-            // 从环境变量获取API端口，构建时会被替换为实际端口
-            const apiPort = '8888';
-
-            // HTTPS 时使用主域名，HTTP 时使用配置的端口
+            // HTTPS 时使用主域名，HTTP 时使用带端口的地址
             let baseUrl;
             if (protocol === 'https:') {
                 baseUrl = protocol + '//' + hostname;
             } else {
-                // 内网访问，使用配置的端口
-                baseUrl = protocol + '//' + hostname + ':' + apiPort;
+                // 内网访问，需要判断是localhost还是其他
+                if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                    baseUrl = protocol + '//localhost:8081';
+                } else {
+                    baseUrl = protocol + '//' + hostname + ':8081';
+                }
             }
             return baseUrl + imagePath;
         },
@@ -927,10 +1504,12 @@ createApp({
             console.log('[submitInput] event.target:', event.target);
 
             let inputValue = '';
+            let cmdPrefix = '';
             // 如果是输入框的回车事件
             if (event.target && event.target.tagName === 'INPUT') {
                 inputValue = event.target.value || '';
-                console.log('[submitInput] 从INPUT获取值:', inputValue);
+                cmdPrefix = event.target.dataset.cmdPrefix || '';
+                console.log('[submitInput] 从INPUT获取值:', inputValue, 'cmdPrefix:', cmdPrefix);
             } else {
                 // 如果是确定按钮的点击事件，通过ref获取输入框的值
                 const refName = 'input-' + name;
@@ -938,13 +1517,17 @@ createApp({
                 console.log('[submitInput] refName:', refName, 'inputRef:', inputRef);
                 if (inputRef && inputRef.length) {
                     inputValue = inputRef[0].value || '';
-                    console.log('[submitInput] 从inputRef[0]获取值:', inputValue);
+                    cmdPrefix = inputRef[0].dataset.cmdPrefix || '';
+                    console.log('[submitInput] 从inputRef[0]获取值:', inputValue, 'cmdPrefix:', cmdPrefix);
                 } else if (inputRef) {
                     inputValue = inputRef.value || '';
-                    console.log('[submitInput] 从inputRef获取值:', inputValue);
+                    cmdPrefix = inputRef.dataset.cmdPrefix || '';
+                    console.log('[submitInput] 从inputRef获取值:', inputValue, 'cmdPrefix:', cmdPrefix);
                 }
             }
-            const cmd = `${name} ${inputValue}`;
+            // 如果有 cmdPrefix，使用它作为命令前缀，否则使用 name
+            const cmdName = cmdPrefix ? cmdPrefix : name;
+            const cmd = `${cmdName} ${inputValue}`;
             console.log('[submitInput] 最终命令:', cmd);
             this.sendJsonCommand(cmd);
         },
@@ -969,11 +1552,36 @@ createApp({
             this.sendJsonCommand(cmd);
         },
 
+        // JSON模式: 提交表单（收集所有form-input输入框的值）
+        async submitForm(baseCmd) {
+            console.log('[submitForm] 被调用, baseCmd:', baseCmd);
+
+            // 获取所有带 form-field 类的输入框
+            const formInputs = document.querySelectorAll('.form-field');
+            console.log('[submitForm] 找到表单输入框数量:', formInputs.length);
+
+            // 构建命令，将参数以 name=value 格式附加到命令后面
+            let cmd = baseCmd;
+            formInputs.forEach(input => {
+                const name = input.name;
+                const value = input.value ? input.value.trim() : '';
+                if (name && value) {
+                    cmd += ` ${name}=${value}`;
+                    console.log(`[submitForm] 添加参数: ${name}=${value}`);
+                }
+            });
+
+            console.log('[submitForm] 最终命令:', cmd);
+
+            // 使用 sendJsonCommand 发送命令
+            this.sendJsonCommand(cmd);
+        },
+
         // 退出登录
         doLogout() {
-            localStorage.removeItem('mud_txd');
-            localStorage.removeItem('mud_partition');
-            localStorage.removeItem('mud_userid');
+            sessionStorage.removeItem('mud_txd');
+            sessionStorage.removeItem('mud_partition');
+            sessionStorage.removeItem('mud_userid');
             this.txd = '';
             this.gameFrameUrl = '';
             this.playerStats = null;
@@ -990,9 +1598,9 @@ createApp({
 
         // 自动重新登录（当会话过期时）
         async relogin() {
-            const savedPartition = localStorage.getItem('mud_partition') || 'tx01';
-            const savedUser = localStorage.getItem('mud_userid');
-            const savedTxd = localStorage.getItem('mud_txd');
+            const savedPartition = sessionStorage.getItem('mud_partition') || 'tx01';
+            const savedUser = sessionStorage.getItem('mud_userid');
+            const savedTxd = sessionStorage.getItem('mud_txd');
             if (!savedTxd || !savedUser) {
                 // 没有保存的登录信息，显示登录界面
                 this.showLogin = true;
@@ -1008,23 +1616,14 @@ createApp({
 
                 const fullUserid = savedPartition + savedUser;
 
-                // 获取 challenge
-                const challengeResp = await fetch(this.apiBase + '/api/challenge');
-                if (!challengeResp.ok) {
-                    throw new Error('获取安全挑战失败');
-                }
-                const challengeData = await challengeResp.json();
-                const challenge = challengeData.challenge;
-
-                // 使用 challenge 对密码进行哈希
-                const passwordHash = await sha256(challenge + password);
+                // 使用明文密码（不再使用challenge哈希）
+                const plainPassword = password;
 
                 // 发送登录请求
                 const params = new URLSearchParams({
                     userid: fullUserid,
-                    password: passwordHash,
-                    challenge: challenge,
-                    cmd: 'init'
+                    password: plainPassword,
+                    cmd: 'look'
                 });
 
                 const response = await fetch(this.apiBase + '/api/json?' + params.toString());
@@ -1040,12 +1639,23 @@ createApp({
 
                 // 重新登录成功
                 this.txd = data.txd || this.encodeTxd(fullUserid, password);
-                localStorage.setItem('mud_txd', this.txd);
-                localStorage.setItem('mud_partition', savedPartition);
-                localStorage.setItem('mud_userid', savedUser);
+                sessionStorage.setItem('mud_txd', this.txd);
+                sessionStorage.setItem('mud_partition', savedPartition);
+                sessionStorage.setItem('mud_userid', savedUser);
 
                 // 更新 MUD 输出
                 this.mudLines = data.lines || [];
+
+                // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
+                if (data.state) {
+                    this.state = {
+                        player: data.state.player || this.state.player,
+                        messages: data.state.messages || this.state.messages,
+                        actions: data.state.actions || this.state.actions,
+                        navigation: data.state.navigation || this.state.navigation
+                    };
+                }
+
                 this.showLogin = false;
 
                 console.log('[重新登录] 成功');
@@ -1105,9 +1715,9 @@ createApp({
         // 返回界面选择
         goToSelection() {
             if (confirm('返回界面选择？')) {
-                localStorage.removeItem('mud_txd');
-                localStorage.removeItem('mud_partition');
-                localStorage.removeItem('mud_userid');
+                sessionStorage.removeItem('mud_txd');
+                sessionStorage.removeItem('mud_partition');
+                sessionStorage.removeItem('mud_userid');
                 localStorage.removeItem('mud_ui_choice');
                 localStorage.removeItem('mud_ui_choice_time');
                 window.location.href = '../pc.jsp?ui=back';
@@ -1117,6 +1727,15 @@ createApp({
         // 切换头部菜单
         toggleHeaderMenu() {
             this.headerMenuOpen = !this.headerMenuOpen;
+            // 如果菜单打开了，且当前不是简体中文，需要重新翻译菜单
+            if (this.headerMenuOpen && typeof translate !== 'undefined') {
+                this.$nextTick(() => {
+                    const currentLang = translate.language.getCurrent();
+                    if (currentLang !== 'chinese_simplified') {
+                        translate.execute();
+                    }
+                });
+            }
         },
 
         // 切换主题
@@ -1557,6 +2176,171 @@ createApp({
         },
 
         /**
+         * 检测并处理复制命令
+         * @param {Array} lines - MUD输出行
+         */
+        handleCopyCommands(lines) {
+            for (const line of lines) {
+                if (!line.segments) continue;
+
+                // 构建完整文本行
+                const lineText = line.segments.map(s => {
+                    if (s.type === 'text') {
+                        return s.parts ? s.parts.map(p => p.content || '').join('') : '';
+                    }
+                    return s.label || '';
+                }).join('');
+
+                // 检测复制命令
+                if (lineText.startsWith('COPY_CODE:')) {
+                    const code = lineText.substring(10).trim();
+                    this.copyToClipboard(code, '邀请码');
+                } else if (lineText.startsWith('COPY_LINK:')) {
+                    const link = lineText.substring(10).trim();
+                    this.copyToClipboard(link, '邀请链接');
+                }
+            }
+        },
+
+        /**
+         * 处理邀请链接占位符 - 动态生成URL
+         * 检测 CMD:DYNAMIC_INVITE_LINK:invite_code 格式
+         */
+        processInviteLinkPlaceholder() {
+            const baseUrl = window.location.origin + window.location.pathname;
+            let inviteCode = null;
+            let insertIndex = -1;
+
+            console.log('[邀请链接] 开始处理, mudLines数量:', this.mudLines.length);
+
+            // 先找到要替换的行索引
+            for (let i = 0; i < this.mudLines.length; i++) {
+                const line = this.mudLines[i];
+                if (!line.segments) continue;
+
+                // 构建完整文本行来检测命令
+                let lineText = '';
+                for (const segment of line.segments) {
+                    if (segment.type === 'text' && segment.parts) {
+                        for (const part of segment.parts) {
+                            if (part.content) lineText += part.content;
+                        }
+                    } else if (segment.type === 'button') {
+                        lineText += segment.label || '';
+                    }
+                }
+
+                // 打印前几行用于调试
+                if (i < 5) {
+                    console.log('[邀请链接] 行', i, '文本:', lineText);
+                }
+
+                // 检测 DYNAMIC_INVITE_LINK 命令
+                const match = lineText.match(/CMD:DYNAMIC_INVITE_LINK:(\S+)/);
+                if (match) {
+                    inviteCode = match[1];
+                    insertIndex = i;
+                    console.log('[邀请链接] 找到匹配行:', i, '邀请码:', inviteCode);
+                    break;
+                }
+            }
+
+            // 如果找到了，进行替换
+            if (inviteCode && insertIndex >= 0) {
+                const inviteUrl = baseUrl + '?ref=' + inviteCode;
+                const newLine = {
+                    type: 'line',  // 必须有 type 属性
+                    segments: [
+                        {
+                            type: 'button',
+                            label: '[复制邀请链接]',
+                            cmd: 'copy_invite_url:' + inviteUrl,
+                            class: 'btn btn-outline-info btn-sm'
+                        }
+                    ]
+                };
+
+                // 使用 splice 触发 Vue 响应式更新（删除1个，插入1个）
+                this.mudLines.splice(insertIndex, 1, newLine);
+
+                console.log('[邀请链接] 动态生成:', inviteUrl);
+                console.log('[邀请链接] 新行结构:', JSON.stringify(newLine));
+                // copy_invite_url命令的处理已在sendJsonCommand中完成
+            } else {
+                console.log('[邀请链接] 未找到邀请码, inviteCode:', inviteCode, 'insertIndex:', insertIndex);
+            }
+        },
+
+        /**
+         * 复制到剪贴板并显示提示
+         * @param {string} text - 要复制的文本
+         * @param {string} label - 提示标签
+         */
+        async copyToClipboard(text, label = '内容') {
+            try {
+                await navigator.clipboard.writeText(text);
+                // 显示成功提示
+                this.showCopySuccess(`${label}已复制`);
+            } catch (err) {
+                console.error('复制失败:', err);
+                // 降级方案：使用传统方法
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    this.showCopySuccess(`${label}已复制`);
+                } catch (e) {
+                    this.showCopySuccess('复制失败，请手动复制');
+                }
+                document.body.removeChild(textArea);
+            }
+        },
+
+        /**
+         * 显示复制成功提示
+         * @param {string} message - 提示消息
+         */
+        showCopySuccess(message) {
+            // 创建临时提示元素
+            const toast = document.createElement('div');
+            toast.textContent = message;
+            toast.style.cssText = `
+                position: fixed;
+                top: 80px;
+                left: 50%;
+                transform: translateX(-50%);
+                background: rgba(0, 0, 0, 0.85);
+                color: #4CAF50;
+                padding: 16px 32px;
+                border-radius: 8px;
+                z-index: 10000;
+                box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+                font-size: 16px;
+                font-weight: bold;
+                transition: opacity 0.3s ease;
+                opacity: 0;
+            `;
+            document.body.appendChild(toast);
+
+            // 触发重排以启用过渡动画
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+            });
+
+            console.log('[复制成功]', message);
+
+            // 2秒后淡出并移除
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 2000);
+        },
+
+        /**
          * 解析战斗动作并生成动画
          * @param {Array} newLines - 新的MUD输出行
          */
@@ -1916,7 +2700,7 @@ createApp({
             this.showPerformsList = true;
 
             try {
-                const txd = localStorage.getItem('mud_txd') || this.txd;
+                const txd = sessionStorage.getItem('mud_txd') || this.txd;
                 if (!txd) {
                     alert('请先登录');
                     this.showPerformsList = false;
@@ -2003,6 +2787,30 @@ createApp({
                 classes.push('critical-animation');
             }
             return classes.join(' ');
+        },
+
+        // 语言切换处理
+        changeLanguage(event) {
+            const lang = event.target.value;
+            console.log('[Vue] changeLanguage called with:', lang);
+            this.selectedLanguage = lang;  // Vue v-model自动更新select值
+
+            // 保存到localStorage
+            localStorage.setItem('userLanguage', lang);
+
+            // 调用translate.js的changeLanguage
+            if (typeof translate !== 'undefined' && translate.changeLanguage) {
+                translate.changeLanguage(lang);
+            }
+
+            // 同步到iframe（如果使用iframe模式）
+            const iframe = document.querySelector('.game-frame');
+            if (iframe && iframe.contentWindow) {
+                iframe.contentWindow.postMessage({type: 'changeLanguage', lang: lang}, '*');
+            }
+
+            // 关闭菜单
+            this.headerMenuOpen = false;
         }
     },
 
@@ -2028,6 +2836,26 @@ createApp({
         this.apiBase = this.detectApiBase();
         const modeText = this.useJsonMode ? 'JSON模式 (无iframe)' : 'iframe模式';
         console.log(`Vue游戏客户端已启动 (${modeText})`);
+
+        // 从URL参数读取推荐码
+        const urlParams = new URLSearchParams(window.location.search);
+        const refParam = urlParams.get('ref');
+        console.log('URL参数解析:', {
+            fullUrl: window.location.href,
+            pathname: window.location.pathname,
+            search: window.location.search,
+            refParam: refParam,
+            urlParams: Array.from(urlParams.entries())
+        });
+        if (refParam) {
+            this.refCode = refParam;
+            console.log('检测到推荐码:', refParam);
+            // 保存到localStorage，注册时使用
+            localStorage.setItem('ref_code', refParam);
+            console.log('推荐码已保存到localStorage');
+        } else {
+            console.log('未检测到推荐码参数');
+        }
 
         // 从localStorage恢复主题设置
         const savedTheme = localStorage.getItem('mud_theme');
@@ -2071,24 +2899,56 @@ createApp({
             }
         });
 
-        // 尝试从 localStorage 恢复登录状态
-        const savedTxd = localStorage.getItem('mud_txd');
-        const savedPartition = localStorage.getItem('mud_partition');
-        const savedUser = localStorage.getItem('mud_userid');
+        // 点击外部关闭菜单
+        document.addEventListener('click', (e) => {
+            const headerMenu = document.querySelector('.header-menu-container');
+            if (headerMenu && !headerMenu.contains(e.target)) {
+                this.headerMenuOpen = false;
+            }
+        });
 
-        if (savedTxd && savedUser) {
-            // 有保存的登录信息，自动恢复
+        // 尝试从 URL 参数读取 txd（用于跨浏览器分享链接）
+        const txdParam = urlParams.get('txd');
+
+        // 尝试从 sessionStorage 恢复登录状态
+        let savedTxd = null;
+        let txdFromUrl = false;  // 标记txd是否来自URL
+        if (txdParam) {
+            savedTxd = txdParam;
+            txdFromUrl = true;
+            console.log('检测到URL中的txd参数，将用于自动登录');
+        } else {
+            savedTxd = sessionStorage.getItem('mud_txd');
+        }
+        const savedPartition = sessionStorage.getItem('mud_partition');
+        const savedUser = sessionStorage.getItem('mud_userid');
+
+        // 自动登录条件：有txd且（来自URL 或 有保存的用户信息）
+        if (savedTxd && (txdFromUrl || savedUser)) {
+            // 有保存的登录信息或URL中有txd，自动恢复
             this.txd = savedTxd;
             this.loginForm.partition = savedPartition || 'tx01';
-            this.loginForm.userid = savedUser;
+            this.loginForm.userid = savedUser || '';  // URL模式可能没有用户名
 
             console.log('恢复登录: txd=', savedTxd.substring(0, 20) + '...');
             console.log('apiBase=', this.apiBase);
 
+            // 如果txd来自URL，保存到sessionStorage以便后续使用
+            if (txdFromUrl) {
+                sessionStorage.setItem('mud_txd', savedTxd);
+                if (savedPartition) {
+                    sessionStorage.setItem('mud_partition', savedPartition);
+                }
+                console.log('[mounted] URL中的txd已保存到sessionStorage');
+            }
+
+            // 自动登录时也保存域名
+            this.saveGameBaseUrl();
+
             if (this.useJsonMode) {
                 // JSON模式: 加载初始MUD输出
                 this.showLogin = false;
-                this.sendJsonCommand('init');
+                this.sendJsonCommand('look');  // 使用 look 而不是 init
             } else {
                 // iframe模式: 设置iframe URL
                 this.gameFrameUrl = this.getGameFrameUrl();

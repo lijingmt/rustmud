@@ -2167,7 +2167,194 @@ body {
 /* 浅色模式聊天输入框 */
 [data-theme="light"] .chat-input {
     background: rgba(0,0,0,0.05);
-    border-color: rgba(0,0,0,0.15);
+}
+
+/* ========== 邀请好友弹窗样式 ========== */
+
+.invite-modal {
+    width: 90%;
+    max-width: 450px;
+    max-height: 85vh;
+    overflow-y: auto;
+    background: var(--bg-card);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.invite-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.invite-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-primary);
+}
+
+.invite-modal-body {
+    padding: 20px;
+}
+
+.invite-desc {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.invite-section {
+    margin-bottom: 20px;
+}
+
+.invite-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.invite-code-box,
+.invite-link-box {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.invite-code-text,
+.invite-link-text {
+    flex: 1;
+    padding: 12px;
+    background: var(--bg-body);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--primary);
+    word-break: break-all;
+    font-family: monospace;
+}
+
+.copy-btn {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.copy-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+}
+
+.copy-btn:active {
+    transform: translateY(0);
+}
+
+.invite-qr-section {
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.qr-code-container {
+    display: inline-block;
+    padding: 15px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.qr-code-img {
+    width: 180px;
+    height: 180px;
+    display: block;
+}
+
+.invite-rules {
+    padding: 15px;
+    background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+    border-radius: 8px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.rules-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.invite-rules p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.invite-stats {
+    text-align: center;
+}
+
+.stats-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--success), #45a049);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.stats-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(34,139,34,0.4);
+}
+
+.stats-btn:active {
+    transform: translateY(0);
+}
+
+/* 暗色模式邀请弹窗 */
+[data-theme="dark"] .invite-modal {
+    background: #1a1a2e;
+}
+
+[data-theme="dark"] .qr-code-container {
+    background: #2a2a4e;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* 浅色模式邀请弹窗 */
+[data-theme="light"] .invite-modal {
+    background: white;
+}
+
+[data-theme="light"] .invite-rules {
+    background: linear-gradient(135deg, rgba(0,122,255,0.1), rgba(88,86,214,0.1));
 }
 
 /* 聊天链接样式 */
@@ -2428,6 +2615,18 @@ body {
     justify-content: center;
     height: 100%;
     gap: 16px;
+}
+
+/* 慢速加载提示 */
+.slow-loading-tip {
+    color: #ffc107;
+    font-size: 14px;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 /* MUD输入框组 */
@@ -5229,4 +5428,59 @@ body {
     padding: 30px 20px;
     color: #888;
     font-size: 14px;
+}
+
+/* 导航按钮样式 */
+.navigation-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 15px;
+    background: rgba(139, 119, 101, 0.1);
+    border-top: 1px solid rgba(139, 119, 101, 0.3);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.nav-btn {
+    min-width: 80px;
+    padding: 10px 15px;
+    background: linear-gradient(135deg, #8B7765 0%, #A08060 100%);
+    border: 2px solid #6B5B47;
+    border-radius: 8px;
+    color: #FFFEF8;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.nav-btn:hover {
+    background: linear-gradient(135deg, #A08060 0%, #B09070 100%);
+    border-color: #8B7765;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 119, 101, 0.4);
+}
+
+.nav-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px rgba(139, 119, 101, 0.3);
+}
+
+/* 暗色模式导航按钮 */
+.dark-mode .navigation-bar {
+    background: rgba(0, 255, 255, 0.05);
+    border-top: 1px solid rgba(0, 255, 255, 0.2);
+}
+
+.dark-mode .nav-btn {
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2) 0%, rgba(102, 126, 234, 0.2) 100%);
+    border-color: rgba(0, 255, 255, 0.4);
+    text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+}
+
+.dark-mode .nav-btn:hover {
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.3) 0%, rgba(102, 126, 234, 0.3) 100%);
+    border-color: rgba(0, 255, 255, 0.6);
+    box-shadow: 0 4px 12px rgba(0, 255, 255, 0.3);
 }

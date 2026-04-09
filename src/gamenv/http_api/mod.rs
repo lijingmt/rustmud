@@ -1260,11 +1260,18 @@ async fn pk_continue_command(userid: &str) -> String {
                 // 执行下一回合
                 if let Some(round) = PKD.next_round(&battle.battle_id).await {
                     if round.ended {
-                        // 战斗结束，显示结果
-                        let result = battle.generate_result();
-                        // 清理战斗
-                        PKD.end_battle(&battle.battle_id).await;
-                        result
+                        // 战斗结束，重新获取战斗以获得最终状态
+                        if let Some(final_battle) = PKD.get_battle(&battle.battle_id).await {
+                            let result = final_battle.generate_result();
+                            // 清理战斗
+                            PKD.end_battle(&battle.battle_id).await;
+                            result
+                        } else {
+                            // 战斗已被清理，使用原始数据生成结果
+                            let result = battle.generate_result();
+                            PKD.end_battle(&battle.battle_id).await;
+                            result
+                        }
                     } else {
                         // 战斗继续：重新获取战斗状态以获得更新后的HP
                         let updated_battle = PKD.get_player_battle(userid).await;
@@ -1297,7 +1304,7 @@ async fn pk_continue_command(userid: &str) -> String {
             }
         }
         None => {
-            "你不在战斗中！\n[返回:look]".to_string()
+            "你不在战斗中！\n[返回房间:look]".to_string()
         }
     }
 }

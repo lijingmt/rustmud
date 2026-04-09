@@ -158,7 +158,7 @@
                             ☰
                         </button>
                         <!-- 弹出菜单 -->
-                        <div class="header-dropdown-menu" v-if="headerMenuOpen" @clickaway="headerMenuOpen = false">
+                        <div class="header-dropdown-menu" v-if="headerMenuOpen">
                             <div class="menu-item" @click="toggleTheme(); headerMenuOpen = false;">
                                 <span class="menu-icon">{{ theme === 'classic' ? '🌙' : (theme === 'dark' ? '☀️' : '🏜️') }}</span>
                                 <span>{{ theme === 'classic' ? '暗色模式' : (theme === 'dark' ? '浅色模式' : '经典模式') }}</span>
@@ -166,7 +166,7 @@
                             <div class="menu-divider"></div>
                             <div class="menu-item language-item">
                                 <span class="menu-icon">🌐</span>
-                                <select id="vueLanguageSelect" onchange="changeVueLanguage(this.value); headerMenuOpen = false;" class="menu-select">
+                                <select id="vueLanguageSelect" v-model="selectedLanguage" @change="changeLanguage($event)" class="menu-select">
                                     <option value="chinese_simplified">简体中文</option>
                                     <option value="chinese_traditional">繁體中文</option>
                                     <option value="english">English</option>
@@ -235,6 +235,7 @@
                                                    :name="segment.name"
                                                    :placeholder="segment.default || ('请输入' + segment.name)"
                                                    :style="segment.width ? 'width:' + segment.width : ''"
+                                                   :data-cmd-prefix="segment.cmdPrefix || ''"
                                                    @keyup.enter="submitInput(segment.name, $event)"
                                                    class="mud-input"
                                                    :ref="'input-' + segment.name">
@@ -242,6 +243,19 @@
                                                @click.prevent="submitInput(segment.name, $event)"
                                                class="mud-btn mud-confirm-btn">确定</a>
                                         </span>
+                                        <!-- 表单输入框 (不带确定按钮) -->
+                                        <span v-else-if="segment.type === 'form-input'" class="mud-input-group">
+                                            <input :type="segment.inputType || 'text'"
+                                                   :name="segment.name"
+                                                   :placeholder="segment.placeholder || ('请输入' + segment.name)"
+                                                   class="mud-input form-field"
+                                                   :ref="'form-input-' + segment.name">
+                                        </span>
+                                        <!-- 提交按钮 (收集所有表单输入框的值) -->
+                                        <a v-else-if="segment.type === 'submit-button'"
+                                           href="#"
+                                           @click.prevent="submitForm(segment.command)"
+                                           class="mud-btn mud-confirm-btn">{{ segment.label }}</a>
                                         <!-- 命令输入框 -->
                                         <span v-else-if="segment.type === 'cmd-input'" class="mud-cmd-input">
                                             <input type="text"
@@ -265,6 +279,7 @@
                     <div v-else class="mud-loading">
                         <div class="spinner"></div>
                         <div>加载中...</div>
+                        <div v-if="slowLoadingTip" class="slow-loading-tip">数据量较大，请耐心等待...</div>
                     </div>
                 </div>
 
@@ -496,6 +511,61 @@
                 </div>
             </div>
 
+            <!-- 邀请好友弹窗 -->
+            <div class="modal-overlay" v-if="showInviteModal" @click.self="closeInviteModal">
+                <div class="invite-modal">
+                    <div class="invite-modal-header">
+                        <h3>👥 邀请好友</h3>
+                        <button class="chat-close-btn" @click="closeInviteModal">✕</button>
+                    </div>
+                    <div class="invite-modal-body">
+                        <p class="invite-desc">通过邀请链接注册的玩家充值后，您将获得天下点奖励！</p>
+
+                        <div class="invite-section">
+                            <label class="invite-label">您的邀请码：</label>
+                            <div class="invite-code-box">
+                                <span class="invite-code-text">{{ inviteCode || username }}</span>
+                                <button class="copy-btn" @click="copyInviteCode">复制</button>
+                            </div>
+                        </div>
+
+                        <div class="invite-section">
+                            <label class="invite-label">邀请链接：</label>
+                            <div class="invite-link-box">
+                                <span class="invite-link-text">{{ inviteLink }}</span>
+                                <button class="copy-btn" @click="copyInviteLink">复制</button>
+                            </div>
+                        </div>
+
+                        <div class="invite-qr-section">
+                            <label class="invite-label">扫码邀请：</label>
+                            <div class="qr-code-container">
+                                <img :src="qrCodeUrl" alt="邀请二维码" class="qr-code-img">
+                            </div>
+                        </div>
+
+                        <div class="invite-rules">
+                            <p class="rules-title">🎁 奖励规则</p>
+                            <p>每推荐 <strong>4</strong> 人充值，获得 <strong>5000</strong> 天下点！</p>
+                        </div>
+
+                        <div class="invite-stats">
+                            <button class="stats-btn" @click="viewInviteStats">查看邀请统计</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 导航按钮 (东南西北) -->
+            <div class="navigation-bar" v-if="navigation && navigation.length > 0">
+                <button v-for="nav in navigation" :key="nav.direction"
+                        @click="sendJsonCommand(nav.command)"
+                        class="nav-btn"
+                        :title="nav.target">
+                    {{ nav.label }}
+                </button>
+            </div>
+
             <!-- 快捷命令栏 -->
             <footer class="quick-actions" :class="{ collapsed: quickActionsCollapsed }">
                 <button class="quick-toggle-btn" @click="toggleQuickActions" :title="quickActionsCollapsed ? '展开菜单' : '折叠菜单'">
@@ -518,16 +588,24 @@
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=v1775751151582"></script>
     <!-- 翻译插件 - 立即执行初始化 -->
     <script src="../includes/translate.js"></script>
     <script>
-    // 翻译初始化 - 不使用自动检测，使用用户保存的语言
+    // 翻译初始化
     translate.service.use('client.edge');
 
-    // 获取用户保存的语言，默认简体中文
-    var savedLang = localStorage.getItem('userLanguage') || 'chinese_simplified';
-    console.log('[Translate] Initial language:', savedLang);
+    // 获取用户保存的语言，如果没有则自动检测浏览器语言（仅首次）
+    var savedLang = localStorage.getItem('userLanguage');
+    if (!savedLang) {
+        // 首次访问，自动检测浏览器语言并保存
+        translate.autoDiscriminateLocalLanguage();
+        savedLang = translate.language.getCurrent();
+        localStorage.setItem('userLanguage', savedLang);
+        console.log('[Translate] Auto-detected language:', savedLang);
+    } else {
+        console.log('[Translate] Saved language:', savedLang);
+    }
 
     // 设置本地语言并执行翻译
     translate.language.setLocal('chinese_simplified'); // 原文是简体中文
