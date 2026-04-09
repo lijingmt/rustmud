@@ -151,6 +151,13 @@ createApp({
             slowLoadingTip: false,  // 慢速加载提示（超过3秒显示）
             loadingTimer: null,  // 加载计时器
             navigation: [],  // 导航按钮数据
+            // state object for template binding
+            state: {
+                player: null,
+                messages: [],
+                actions: [],
+                navigation: { exits: [] }
+            },
             // 战斗系统
             isInBattle: false,  // 是否处于战斗状态
             battleMiniMode: true,  // 迷你模式：只显示HP条
@@ -206,11 +213,23 @@ createApp({
             }
         },
 
+        // 获取导航图标
+        getNavIcon(label) {
+            if (!label) return '→';
+            if (label.includes('北')) return '↑';
+            if (label.includes('南')) return '↓';
+            if (label.includes('东')) return '→';
+            if (label.includes('西')) return '←';
+            if (label.includes('上')) return '↑';
+            if (label.includes('下')) return '↓';
+            return '→';
+        },
+
         detectApiBase() {
             const hostname = window.location.hostname;
             const protocol = window.location.protocol;
             // API端口 - 容器启动时会被sed替换为实际端口
-            const apiPort = '8888';
+            const apiPort = '8081';
 
             // localhost 始终使用配置的端口
             if (hostname === 'localhost' || hostname === '127.0.0.1') {
@@ -456,6 +475,22 @@ createApp({
 
                     // 更新MUD输出
                     this.mudLines = data.lines || [];
+
+                    // 更新state对象（用于模板绑定）
+                    if (data.state) {
+                        if (data.state.player) {
+                            this.state.player = data.state.player;
+                        }
+                        if (data.state.messages) {
+                            this.state.messages = data.state.messages;
+                        }
+                        if (data.state.actions) {
+                            this.state.actions = data.state.actions;
+                        }
+                        if (data.state.navigation) {
+                            this.state.navigation = data.state.navigation;
+                        }
+                    }
 
                     // 隐藏登录界面
                     this.showLogin = false;
@@ -795,21 +830,25 @@ createApp({
         },
 
         // 发送命令
-        sendCommand() {
-            const cmd = this.commandInput.trim();
-            if (!cmd) return;
+        sendCommand(cmd = null) {
+            // 如果没有传入命令，从输入框获取
+            const command = cmd || this.commandInput.trim();
+            if (!command) return;
 
             // JSON模式优先
             if (this.useJsonMode) {
-                this.lastCommand = cmd;
-                this.sendJsonCommand(cmd);
-                this.commandInput = '';
-                this.showCommandInput = false;
+                this.lastCommand = command;
+                this.sendJsonCommand(command);
+                // 只有从输入框发送时才清空
+                if (!cmd) {
+                    this.commandInput = '';
+                    this.showCommandInput = false;
+                }
             } else if (this.useAsyncMode) {
                 this.sendCommandAsync();
             } else {
                 // 同步模式（原有方式）
-                const url = `${this.apiBase}/api/html?txd=${encodeURIComponent(this.txd)}&cmd=${encodeURIComponent(cmd)}`;
+                const url = `${this.apiBase}/api/html?txd=${encodeURIComponent(this.txd)}&cmd=${encodeURIComponent(command)}`;
                 const iframe = this.$refs.gameFrame;
                 if (iframe) {
                     this.frameLoading = true;
@@ -971,14 +1010,31 @@ createApp({
                 }
                 // 更新MUD输出
                 this.mudLines = data.lines || [];
-                // 更新导航按钮
-                if (data.navigation) {
-                    this.navigation = data.navigation;
-                    console.log('[sendJsonCommand] 导航按钮:', this.navigation);
-                    console.log('[sendJsonCommand] 导航按钮数量:', this.navigation.length);
-                } else {
-                    console.log('[sendJsonCommand] 没有导航数据，data:', data);
+
+                // 更新state对象（用于模板绑定）
+                if (data.state) {
+                    if (data.state.player) {
+                        this.state.player = data.state.player;
+                    }
+                    if (data.state.messages) {
+                        this.state.messages = data.state.messages;
+                    }
+                    if (data.state.actions) {
+                        this.state.actions = data.state.actions;
+                    }
+                    if (data.state.navigation) {
+                        this.state.navigation = data.state.navigation;
+                    }
                 }
+
+                // 更新导航按钮（兼容旧代码）
+                if (data.state && data.state.navigation) {
+                    this.navigation = data.state.navigation.exits || [];
+                } else if (data.navigation) {
+                    this.navigation = data.navigation;
+                }
+                console.log('[sendJsonCommand] state:', this.state);
+                console.log('[sendJsonCommand] 导航按钮:', this.navigation);
                 console.log('[sendJsonCommand] mudLines数量:', this.mudLines.length);
 
                 // 处理复制指令（从后端返回的copy字段）
@@ -1101,9 +1157,9 @@ createApp({
             } else {
                 // 内网访问，需要判断是localhost还是其他
                 if (hostname === 'localhost' || hostname === '127.0.0.1') {
-                    baseUrl = protocol + '//localhost:8888';
+                    baseUrl = protocol + '//localhost:8081';
                 } else {
-                    baseUrl = protocol + '//' + hostname + ':8888';
+                    baseUrl = protocol + '//' + hostname + ':8081';
                 }
             }
             return baseUrl + imagePath;
@@ -1267,6 +1323,23 @@ createApp({
 
                 // 更新 MUD 输出
                 this.mudLines = data.lines || [];
+
+                // 更新state对象（用于模板绑定）
+                if (data.state) {
+                    if (data.state.player) {
+                        this.state.player = data.state.player;
+                    }
+                    if (data.state.messages) {
+                        this.state.messages = data.state.messages;
+                    }
+                    if (data.state.actions) {
+                        this.state.actions = data.state.actions;
+                    }
+                    if (data.state.navigation) {
+                        this.state.navigation = data.state.navigation;
+                    }
+                }
+
                 this.showLogin = false;
 
                 console.log('[重新登录] 成功');

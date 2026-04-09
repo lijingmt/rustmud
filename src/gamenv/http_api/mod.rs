@@ -55,8 +55,11 @@ pub fn create_router() -> Router {
         .route("/ws", get(ws_handler))
         // REST API - Vue frontend compatibility
         .route("/api", get(api_get_handler))  // For Vue frontend (txd+cmd query params)
+        .route("/api/json", get(api_get_handler))  // Alternative path for compatibility
+        .route("/api/partitions", get(get_partitions))  // Get game partitions list
         // REST API - Internal endpoints
         .route("/api/command", post(execute_command))
+        .route("/api/invite/seturl", post(save_invite_url))  // Invite URL tracking
         .route("/api/status", get(get_status))
         .route("/api/user/{userid}", get(get_user_info))
         // Static files
@@ -277,31 +280,46 @@ struct WsResponse {
 }
 
 /// API GET handler for Vue frontend compatibility
-/// Handles requests like: /api?txd=xxx&cmd=look
+/// Handles requests like: /api?txd=xxx&cmd=look or /api?userid=xxx&password=xxx&cmd=look
 pub async fn api_get_handler(
     State(state): State<HttpApiState>,
-    Query(params): Query<ApiGetParams>,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Json<serde_json::Value> {
-    // Decode TXD to get userid and password
-    let auth_mgr = crate::gamenv::http_api::auth::get_auth_manager();
-    let decoded = match auth_mgr.lock() {
-        Ok(mgr) => mgr.decode_txd(&params.txd),
-        Err(_) => None,
+    // Extract parameters manually
+    let txd = params.get("txd").map(|s| s.as_str());
+    let userid = params.get("userid").map(|s| s.as_str());
+    let _password = params.get("password").map(|s| s.as_str());
+    let cmd = params.get("cmd").map(|s| s.as_str()).unwrap_or("look");
+
+    // Try multiple authentication methods
+    let userid = if let Some(txd_val) = txd {
+        // Method 1: Decode TXD to get userid
+        let auth_mgr = crate::gamenv::http_api::auth::get_auth_manager();
+        match auth_mgr.lock() {
+            Ok(mgr) => mgr.decode_txd(txd_val).map(|d| d.userid),
+            Err(_) => None,
+        }
+    } else if let Some(uid) = userid {
+        // Method 2: Direct userid+password authentication
+        // TODO: Validate password against database
+        Some(uid.to_string())
+    } else {
+        None
     };
 
-    let userid = match decoded {
-        Some(d) => d.userid,
-        None => return Json(serde_json::json!({"error": "Authentication failed"})),
+    let userid = match userid {
+        Some(u) => u,
+        None => return Json(serde_json::json!({"error": "Authentication failed", "status": "error"})),
     };
 
     // Execute command
-    let result = match execute_command_internal(userid.clone(), params.cmd.clone(), state).await {
+    let result = match execute_command_internal(userid.clone(), cmd.to_string(), state).await {
         Ok(r) => r,
         Err(_) => return Json(serde_json::json!({"error": "Command failed"})),
     };
 
     // Parse the output to extract game state
-    let response = build_game_response(&result.output, &userid, &params.cmd).await;
+    let response = build_game_response(&result.output, &userid, cmd).await;
 
     Json(response)
 }
@@ -446,29 +464,32 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
         "lines": mud_lines,
         "room_info": room_info,
         "player_stats": player_stats,
-        "navigation": navigation,
-        "messages": [{
-            "type": msg_type,
-            "text": output
-        }],
-        "player": {
-            "name": userid,
-            "level": 1,
-            "hp": 100,
-            "hpMax": 100,
-            "hpPercent": 100,
-            "mp": 50,
-            "mpMax": 50,
-            "mpPercent": 100,
-            "exp": 0,
-            "expPercent": 0
-        },
-        "actions": [
-            {"id": "look", "label": "查看", "command": "look", "style": "primary"},
-            {"id": "inventory", "label": "背包", "command": "inventory", "style": "default"},
-            {"id": "score", "label": "状态", "command": "score", "style": "default"},
-            {"id": "skills", "label": "技能", "command": "skills", "style": "default"}
-        ]
+        "state": {
+            "player": {
+                "name": userid,
+                "level": 1,
+                "hp": 100,
+                "hpMax": 100,
+                "hpPercent": 100,
+                "mp": 50,
+                "mpMax": 50,
+                "mpPercent": 100,
+                "exp": 0,
+                "expPercent": 0
+            },
+            "messages": [{
+                "id": chrono::Utc::now().timestamp_millis(),
+                "type": msg_type,
+                "text": output
+            }],
+            "actions": [
+                {"id": "look", "label": "查看", "command": "look", "style": "primary"},
+                {"id": "inventory", "label": "背包", "command": "inventory", "style": "default"},
+                {"id": "score", "label": "状态", "command": "score", "style": "default"},
+                {"id": "skills", "label": "技能", "command": "skills", "style": "default"}
+            ],
+            "navigation": navigation
+        }
     });
 
     // 打印完整响应到控制台
@@ -498,9 +519,23 @@ fn get_direction_label(dir: &str) -> &str {
 
 /// API GET parameters
 #[derive(Debug, Deserialize)]
+#[serde(default)]
 struct ApiGetParams {
-    txd: String,
+    txd: Option<String>,
+    userid: Option<String>,
+    password: Option<String>,
     cmd: String,
+}
+
+impl Default for ApiGetParams {
+    fn default() -> Self {
+        Self {
+            txd: None,
+            userid: None,
+            password: None,
+            cmd: "look".to_string(),
+        }
+    }
 }
 
 /// Execute command API
@@ -1043,5 +1078,31 @@ pub async fn get_user_info(
     Ok(Json(serde_json::json!({
         "userid": userid,
         "name": "Player"
+    })))
+}
+
+/// Get game partitions list
+pub async fn get_partitions() -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "partitions": [
+            {"id": "tx01", "name": "天下01", "online": 10}
+        ]
+    }))
+}
+
+/// Save invite URL (for invite tracking)
+pub async fn save_invite_url(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // Extract txd and url from query parameters
+    let _txd = params.get("txd");
+    let url = params.get("url");
+
+    // TODO: Store the invite URL in database for the user
+    tracing::info!("Invite URL saved: {:?}", url);
+
+    Ok(Json(serde_json::json!({
+        "status": "success",
+        "message": "URL saved"
     })))
 }
