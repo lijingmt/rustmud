@@ -352,6 +352,10 @@ impl PkBattle {
 
         let mut output = String::new();
         output.push_str(&format!("§C========== PK战斗结束 =========§N\n"));
+
+        // 返回按钮 - 放在最上面
+        output.push_str(&format!("[§Y返回房间§N:look]\n\n"));
+
         output.push_str(&format!("§Y胜利者: {}§N\n", winner));
         output.push_str(&format!("战斗回合: {}\n", self.round));
         output.push_str(&format!("战斗时长: {}秒\n",
@@ -360,7 +364,6 @@ impl PkBattle {
                 .unwrap()
                 .as_secs() as i64 - self.start_time
         ));
-        output.push_str(&format!("\n§H【返回】§N\n[返回房间:look]\n"));
 
         output
     }
@@ -370,6 +373,14 @@ impl PkBattle {
         let mut output = String::new();
 
         output.push_str(&format!("§C========== PK战斗进行中 =========§N\n"));
+
+        // 操作按钮 - 放在最上面方便操作
+        output.push_str(&format!("§H【操作】§N\n"));
+        output.push_str("[继续战斗:pk continue]\n");
+        output.push_str("[§Y逃跑§N:escape]\n");
+        output.push_str("[§Y投降§N:surrender]\n");
+        output.push_str("\n");
+
         output.push_str(&format!("§Y回合: {}§N\n\n", self.round));
 
         // 挑战者状态
@@ -408,12 +419,6 @@ impl PkBattle {
                 output.push_str("\n");
             }
         }
-
-        // 操作按钮
-        output.push_str(&format!("\n§H【操作】§N\n"));
-        output.push_str("[继续战斗:pk continue]\n");
-        output.push_str("[§Y逃跑§N:escape]\n");
-        output.push_str("[§Y投降§N:surrender]\n");
 
         output
     }
