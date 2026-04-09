@@ -267,11 +267,41 @@ createApp({
                             } else if (!buttonClass.startsWith('btn-outline-')) {
                                 buttonClass = 'btn-outline-' + buttonClass;
                             }
+
+                            // 解析按钮文本和颜色
+                            let buttonText = '';
+                            let buttonParts = [];
+                            if (seg.parts && seg.parts.length > 0) {
+                                // 使用后端解析的颜色 parts
+                                for (const part of seg.parts) {
+                                    if (part.text) {
+                                        const cleanText = part.text.replace(/§[A-Za-z0-9]/g, '');
+                                        if (cleanText) {
+                                            buttonText += cleanText;
+                                            buttonParts.push({
+                                                text: cleanText,
+                                                color: part.color || null,
+                                                bold: part.bold || false
+                                            });
+                                        }
+                                    }
+                                }
+                            } else {
+                                // 后端没有提供 parts，自己解析颜色
+                                buttonText = (seg.label || seg.text || '按钮').replace(/§[A-Za-z0-9]/g, '');
+                                buttonParts.push({
+                                    text: buttonText,
+                                    color: null,
+                                    bold: false
+                                });
+                            }
+
                             segments.push({
-                                text: seg.label || seg.text || '按钮',
+                                text: buttonText,
                                 isButton: true,
                                 buttonClass: buttonClass,
-                                command: cmd
+                                command: cmd,
+                                parts: buttonParts  // 保存颜色 parts 用于渲染
                             });
                         }
                         // 链接类型

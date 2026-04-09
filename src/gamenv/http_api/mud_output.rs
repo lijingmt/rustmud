@@ -258,29 +258,27 @@ impl MudOutputParser {
                 }
             }
 
-            // 添加剩余文本
+            // 添加剩余文本（解析颜色）
             if !remaining_text.trim().is_empty() {
+                let parts = parse_color_codes_to_parts(remaining_text);
                 segments.push(MudSegment {
                     r#type: SegmentType::Text,
                     text: Some(remaining_text.to_string()),
-                    parts: Some(vec![TextPart {
-                        text: remaining_text.to_string(),
-                        color: None,
-                        bold: None,
-                        underline: None,
-                        link: None,
-                    }]),
+                    parts: Some(parts),
                     ..Default::default()
                 });
             }
 
-            // 添加所有解析出的按钮
+            // 添加所有解析出的按钮（解析标签中的颜色）
             for (label, command, button_class) in menu_buttons {
+                // 解析按钮标签中的颜色代码
+                let label_parts = parse_color_codes_to_parts(&label);
                 segments.push(MudSegment {
                     r#type: SegmentType::Button,
                     label: Some(label),
                     cmd: Some(command),
                     class: Some(button_class.to_string()),
+                    parts: Some(label_parts),
                     ..Default::default()
                 });
             }

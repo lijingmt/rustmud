@@ -89,12 +89,22 @@
                             <!-- 文本行 -->
                             <template v-else>
                                 <span v-for="(segment, sidx) in line.segments" :key="sidx">
-                                    <!-- 按钮片段 -->
+                                    <!-- 按钮片段 - 支持颜色 -->
                                     <a v-if="segment.isButton"
                                        href="#"
                                        :class="['btn', 'btn-sm', 'mud-btn', segment.buttonClass]"
                                        @click.prevent="sendCommand(segment.command)">
-                                        {{ segment.text }}
+                                        <!-- 如果有 parts 数组，渲染带颜色的文本 -->
+                                        <template v-if="segment.parts && segment.parts.length > 0">
+                                            <span v-for="(part, pidx) in segment.parts" :key="pidx"
+                                                  :style="{color: part.color, fontWeight: part.bold ? 'bold' : 'normal'}">
+                                                {{ part.text }}
+                                            </span>
+                                        </template>
+                                        <!-- 否则使用纯文本 -->
+                                        <template v-else>
+                                            {{ segment.text }}
+                                        </template>
                                     </a>
                                     <!-- 纯文本片段 - 支持颜色 -->
                                     <span v-else
@@ -131,6 +141,6 @@
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="js/app.js?v=20260409-colors"></script>
+    <script src="js/app.js?v=20260409-btn-colors"></script>
 </body>
 </html>
