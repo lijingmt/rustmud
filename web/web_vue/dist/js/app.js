@@ -244,40 +244,64 @@ createApp({
 
             if (this.mudLines && this.mudLines.length > 0) {
                 for (const mudLine of this.mudLines) {
-                    if (mudLine.type === 'empty') {
+                    // 空行
+                    if (mudLine.type === 'empty' || !mudLine.segments || mudLine.segments.length === 0) {
                         lines.push({ isEmpty: true });
                         continue;
                     }
-                    if (mudLine.type === 'line' && mudLine.segments) {
-                        const segments = [];
-                        for (const seg of mudLine.segments) {
-                            if (seg.type === 'text') {
-                                const buttonMatch = seg.text.match(/\*\*([^*]+)\*\*/);
-                                if (buttonMatch) {
-                                    segments.push({
-                                        text: buttonMatch[1],
-                                        isButton: true,
-                                        buttonClass: this.getButtonStyle(buttonMatch[1]),
-                                        command: this.getButtonCommand(buttonMatch[1])
-                                    });
-                                } else {
-                                    segments.push({
-                                        text: seg.text.replace(/§[A-Z]/g, '').replace(/§N/g, ''),
-                                        isButton: false
-                                    });
+
+                    const segments = [];
+                    for (const seg of mudLine.segments) {
+                        // 按钮类型（导航、NPC等）
+                        if (seg.type === 'button') {
+                            segments.push({
+                                text: seg.label || seg.text || '按钮',
+                                isButton: true,
+                                buttonClass: this.getButtonStyle(seg.label || ''),
+                                command: seg.cmd || seg.command || seg.label || ''
+                            });
+                        }
+                        // 链接类型
+                        else if (seg.type === 'link') {
+                            segments.push({
+                                text: seg.label || seg.text || '链接',
+                                isButton: true,
+                                buttonClass: this.getButtonStyle(seg.label || ''),
+                                command: seg.cmd || seg.command || seg.label || ''
+                            });
+                        }
+                        // 文本类型 - 检查 parts 数组
+                        else if (seg.type === 'text' && seg.parts && seg.parts.length > 0) {
+                            // 合并所有 parts 的文本
+                            let fullText = '';
+                            for (const part of seg.parts) {
+                                if (part.text) {
+                                    fullText += part.text;
                                 }
-                            } else if (seg.type === 'link') {
+                            }
+                            // 移除颜色代码
+                            const cleanText = fullText.replace(/§[A-Z]/g, '').replace(/\\n/g, '\n');
+                            if (cleanText.trim()) {
                                 segments.push({
-                                    text: seg.text || seg.label || '链接',
-                                    isButton: true,
-                                    buttonClass: this.getButtonStyle(seg.label || ''),
-                                    command: seg.command || seg.cmd || seg.label || ''
+                                    text: cleanText,
+                                    isButton: false
                                 });
                             }
                         }
-                        if (segments.length > 0) {
-                            lines.push({ isEmpty: false, segments });
+                        // 其他类型 - 直接使用 text 属性
+                        else if (seg.text) {
+                            const cleanText = seg.text.replace(/§[A-Z]/g, '').replace(/\\n/g, '\n');
+                            if (cleanText.trim()) {
+                                segments.push({
+                                    text: cleanText,
+                                    isButton: false
+                                });
+                            }
                         }
+                    }
+
+                    if (segments.length > 0) {
+                        lines.push({ isEmpty: false, segments });
                     }
                 }
             }
@@ -288,7 +312,7 @@ createApp({
 
             this.parsedMudLinesData = lines;
             console.log('[updateParsedMudLines] updated parsedMudLinesData:', lines.length);
-            console.log('[updateParsedMudLines] lines[0]:', lines[0]);
+            console.log('[updateParsedMudLines] sample:', lines[0]);
             // 强制触发 Vue 更新
             this.$forceUpdate();
         },
