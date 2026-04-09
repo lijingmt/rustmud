@@ -206,6 +206,61 @@ impl MudOutputParser {
             }
         }
 
+        // 检测出口文本模式: "明显的出口: 东方 南方 西方" 等
+        let clean_line = line.replace("§H", "").replace("§N", "").replace("§Y", "").replace("§R", "");
+        if clean_line.contains("明显的出口:") || clean_line.contains("出口:") {
+            // 先添加文本部分（"明显的出口:" 或 "出口:"）
+            let prefix = if clean_line.contains("明显的出口:") {
+                "明显的出口: "
+            } else {
+                "出口: "
+            };
+
+            segments.push(MudSegment {
+                r#type: SegmentType::Text,
+                text: Some(prefix.to_string()),
+                parts: Some(vec![TextPart {
+                    text: prefix.to_string(),
+                    color: Some("#ffff00".to_string()),
+                    bold: None,
+                    underline: None,
+                    link: None,
+                }]),
+                ..Default::default()
+            });
+
+            // 提取方向并创建按钮
+            let directions = [
+                ("北方", "north", "↑"),
+                ("南方", "south", "↓"),
+                ("东方", "east", "→"),
+                ("西方", "west", "←"),
+                ("上方", "up", "↑"),
+                ("下方", "down", "↓"),
+                ("东北", "northeast", "↗"),
+                ("西北", "northwest", "↖"),
+                ("东南", "southeast", "↘"),
+                ("西南", "southwest", "↙"),
+            ];
+
+            for (dir_cn, dir_en, arrow) in directions {
+                if clean_line.contains(dir_cn) {
+                    segments.push(MudSegment {
+                        r#type: SegmentType::Button,
+                        label: Some(format!("{}{}", arrow, dir_cn)),
+                        cmd: Some(dir_en.to_string()),
+                        class: Some("exit-btn".to_string()),
+                        ..Default::default()
+                    });
+                }
+            }
+
+            return MudLine {
+                r#type: "line".to_string(),
+                segments,
+            };
+        }
+
         // 检测出口
         for exit in &self.room_exits {
             if line.contains(&format!("{}:", exit)) || line.contains(&format!("（{}）", exit)) {
