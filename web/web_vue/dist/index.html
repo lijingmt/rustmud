@@ -103,15 +103,6 @@
                                 </span>
                             </template>
                         </div>
-                        <!-- 导航按钮区域 -->
-                        <div class="mud-line" v-if="state.navigation && state.navigation.exits && state.navigation.exits.length">
-                            <a v-for="exit in state.navigation.exits" :key="exit.direction"
-                               href="#"
-                               class="btn btn-outline-success btn-sm mud-btn"
-                               @click.prevent="sendCommand(exit.command)">
-                                {{ getNavIcon(exit.label) }}{{ exit.label }}
-                            </a>
-                        </div>
                     </div>
                 </div>
             </div>
