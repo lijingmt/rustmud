@@ -411,16 +411,6 @@ impl PkBattle {
         output.push_str(&format!("§R生命: {}{}/{}{}\n",
             defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end));
 
-        // 战斗日志 - 移到最下面
-        if !self.combat_log.is_empty() {
-            output.push_str("\n────────────────────────────\n");  // 分隔线
-            output.push_str(&format!("\n§H【战斗记录】§N\n"));
-            for log_entry in self.combat_log.iter().rev().take(5) {
-                output.push_str(log_entry);
-                output.push_str("\n");
-            }
-        }
-
         output
     }
 }

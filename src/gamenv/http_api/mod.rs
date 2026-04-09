@@ -1259,20 +1259,26 @@ async fn pk_continue_command(userid: &str) -> String {
             if battle.status == crate::gamenv::single::daemons::pkd::CombatStatus::Fighting {
                 // 执行下一回合
                 if let Some(round) = PKD.next_round(&battle.battle_id).await {
-                    let mut output = String::new();
-                    for log in &round.log {
-                        output.push_str(log);
-                        output.push_str("\n");
-                    }
-
                     if round.ended {
-                        output.push_str(&format!("\n{}\n", battle.generate_result()));
+                        // 战斗结束，显示结果
+                        let result = battle.generate_result();
                         // 清理战斗
                         PKD.end_battle(&battle.battle_id).await;
+                        result
                     } else {
-                        output.push_str(&format!("\n{}\n", battle.generate_status()));
+                        // 战斗继续：先显示战斗状态（含按钮），再显示战斗日志
+                        let mut output = battle.generate_status();
+
+                        // 添加战斗日志到最下面
+                        output.push_str("\n────────────────────────────\n");
+                        output.push_str("§H【本回合】§N\n");
+                        for log in &round.log {
+                            output.push_str(log);
+                            output.push_str("\n");
+                        }
+
+                        output
                     }
-                    output
                 } else {
                     "战斗已结束！\n[返回:look]".to_string()
                 }
