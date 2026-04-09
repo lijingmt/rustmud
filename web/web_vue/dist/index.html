@@ -83,7 +83,7 @@
                 <div class="mud-parent">
                     <div class="mud-child">
                         <!-- 渲染 MUD 输出行 -->
-                        <div class="mud-line" v-for="(line, idx) in parsedMudLines" :key="idx">
+                        <div class="mud-line" v-for="(line, idx) in parsedMudLinesData" :key="idx">
                             <!-- 空行 -->
                             <br v-if="line.isEmpty">
                             <!-- 文本行 -->
