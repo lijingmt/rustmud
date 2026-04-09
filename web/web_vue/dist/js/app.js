@@ -254,20 +254,29 @@ createApp({
                     for (const seg of mudLine.segments) {
                         // 按钮类型（导航、NPC等）
                         if (seg.type === 'button') {
+                            // 获取命令，如果是 go direction 格式，转换为纯方向
+                            let cmd = seg.cmd || seg.command || seg.label || '';
+                            if (cmd.startsWith('go ')) {
+                                cmd = cmd.substring(3); // 去掉 "go " 前缀
+                            }
                             segments.push({
                                 text: seg.label || seg.text || '按钮',
                                 isButton: true,
                                 buttonClass: this.getButtonStyle(seg.label || ''),
-                                command: seg.cmd || seg.command || seg.label || ''
+                                command: cmd
                             });
                         }
                         // 链接类型
                         else if (seg.type === 'link') {
+                            let cmd = seg.cmd || seg.command || seg.label || '';
+                            if (cmd.startsWith('go ')) {
+                                cmd = cmd.substring(3);
+                            }
                             segments.push({
                                 text: seg.label || seg.text || '链接',
                                 isButton: true,
                                 buttonClass: this.getButtonStyle(seg.label || ''),
-                                command: seg.cmd || seg.command || seg.label || ''
+                                command: cmd
                             });
                         }
                         // 文本类型 - 检查 parts 数组
@@ -355,15 +364,19 @@ createApp({
             return 'btn-outline-info';
         },
 
-        // 获取按钮命令
+        // 获取按钮命令（返回纯方向，不带 go 前缀）
         getButtonCommand(text) {
             if (!text) return '';
-            if (text.includes('北')) return 'go north';
-            if (text.includes('南')) return 'go south';
-            if (text.includes('东')) return 'go east';
-            if (text.includes('西')) return 'go west';
-            if (text.includes('上')) return 'go up';
-            if (text.includes('下')) return 'go down';
+            if (text.includes('北')) return 'north';
+            if (text.includes('南')) return 'south';
+            if (text.includes('东')) return 'east';
+            if (text.includes('西')) return 'west';
+            if (text.includes('上')) return 'up';
+            if (text.includes('下')) return 'down';
+            // 如果命令以 go 开头，去掉前缀
+            if (text.startsWith('go ')) {
+                return text.substring(3);
+            }
             return text;
         },
 
