@@ -351,7 +351,6 @@ impl PkBattle {
         };
 
         let mut output = String::new();
-        output.push_str(&format!("§C========== PK战斗结束 =========§N\n"));
 
         // 返回按钮 - 放在最上面
         output.push_str(&format!("[§Y返回房间§N:look]\n\n"));
@@ -365,14 +364,15 @@ impl PkBattle {
                 .as_secs() as i64 - self.start_time
         ));
 
+        // 标题放在最下面
+        output.push_str(&format!("\n§C========== PK战斗结束 =========§N"));
+
         output
     }
 
     /// 生成战斗状态（用于前端显示）
     pub fn generate_status(&self) -> String {
         let mut output = String::new();
-
-        output.push_str(&format!("§C========== PK战斗进行中 =========§N\n"));
 
         // 操作按钮 - 放在最上面方便操作
         output.push_str(&format!("§H【操作】§N\n"));
@@ -410,6 +410,9 @@ impl PkBattle {
             self.defender.name_cn, self.defender.level));
         output.push_str(&format!("§R生命: {}{}/{}{}\n",
             defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end));
+
+        // 标题放在最下面
+        output.push_str(&format!("\n§C========== PK战斗进行中 =========§N"));
 
         output
     }

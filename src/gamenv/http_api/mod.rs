@@ -1266,8 +1266,15 @@ async fn pk_continue_command(userid: &str) -> String {
                         PKD.end_battle(&battle.battle_id).await;
                         result
                     } else {
-                        // 战斗继续：先显示战斗状态（含按钮），再显示战斗日志
-                        let mut output = battle.generate_status();
+                        // 战斗继续：重新获取战斗状态以获得更新后的HP
+                        let updated_battle = PKD.get_player_battle(userid).await;
+
+                        // 先显示战斗状态（含按钮）
+                        let mut output = if let Some(b) = updated_battle {
+                            b.generate_status()
+                        } else {
+                            battle.generate_status()
+                        };
 
                         // 添加战斗日志到最下面
                         output.push_str("\n────────────────────────────\n");
