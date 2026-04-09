@@ -611,7 +611,7 @@ createApp({
                     const params = new URLSearchParams({
                         userid: fullUserid,
                         password: plainPassword,
-                        cmd: 'init'
+                        cmd: 'look'
                     });
 
                     const response = await fetch(this.apiBase + '/api/json?' + params.toString(), {
@@ -649,20 +649,15 @@ createApp({
                     // 更新MUD输出
                     this.mudLines = data.lines || [];
 
-                    // 更新state对象（用于模板绑定）
+                    // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
                     if (data.state) {
-                        if (data.state.player) {
-                            this.state.player = data.state.player;
-                        }
-                        if (data.state.messages) {
-                            this.state.messages = data.state.messages;
-                        }
-                        if (data.state.actions) {
-                            this.state.actions = data.state.actions;
-                        }
-                        if (data.state.navigation) {
-                            this.state.navigation = data.state.navigation;
-                        }
+                        this.state = {
+                            player: data.state.player || this.state.player,
+                            messages: data.state.messages || this.state.messages,
+                            actions: data.state.actions || this.state.actions,
+                            navigation: data.state.navigation || this.state.navigation
+                        };
+                        console.log('[Login] State updated, messages count:', this.state.messages.length);
                     }
 
                     // 隐藏登录界面
@@ -1184,20 +1179,15 @@ createApp({
                 // 更新MUD输出
                 this.mudLines = data.lines || [];
 
-                // 更新state对象（用于模板绑定）
+                // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
                 if (data.state) {
-                    if (data.state.player) {
-                        this.state.player = data.state.player;
-                    }
-                    if (data.state.messages) {
-                        this.state.messages = data.state.messages;
-                    }
-                    if (data.state.actions) {
-                        this.state.actions = data.state.actions;
-                    }
-                    if (data.state.navigation) {
-                        this.state.navigation = data.state.navigation;
-                    }
+                    this.state = {
+                        player: data.state.player || this.state.player,
+                        messages: data.state.messages || this.state.messages,
+                        actions: data.state.actions || this.state.actions,
+                        navigation: data.state.navigation || this.state.navigation
+                    };
+                    console.log('[sendJsonCommand] State updated, messages count:', this.state.messages.length);
                 }
 
                 // 更新导航按钮（兼容旧代码）
@@ -1206,7 +1196,6 @@ createApp({
                 } else if (data.navigation) {
                     this.navigation = data.navigation;
                 }
-                console.log('[sendJsonCommand] state:', this.state);
                 console.log('[sendJsonCommand] 导航按钮:', this.navigation);
                 console.log('[sendJsonCommand] mudLines数量:', this.mudLines.length);
 
@@ -1474,7 +1463,7 @@ createApp({
                 const params = new URLSearchParams({
                     userid: fullUserid,
                     password: plainPassword,
-                    cmd: 'init'
+                    cmd: 'look'
                 });
 
                 const response = await fetch(this.apiBase + '/api/json?' + params.toString());
@@ -1497,20 +1486,14 @@ createApp({
                 // 更新 MUD 输出
                 this.mudLines = data.lines || [];
 
-                // 更新state对象（用于模板绑定）
+                // 更新state对象（用于模板绑定）- 使用整个对象替换确保响应式
                 if (data.state) {
-                    if (data.state.player) {
-                        this.state.player = data.state.player;
-                    }
-                    if (data.state.messages) {
-                        this.state.messages = data.state.messages;
-                    }
-                    if (data.state.actions) {
-                        this.state.actions = data.state.actions;
-                    }
-                    if (data.state.navigation) {
-                        this.state.navigation = data.state.navigation;
-                    }
+                    this.state = {
+                        player: data.state.player || this.state.player,
+                        messages: data.state.messages || this.state.messages,
+                        actions: data.state.actions || this.state.actions,
+                        navigation: data.state.navigation || this.state.navigation
+                    };
                 }
 
                 this.showLogin = false;
@@ -2805,7 +2788,7 @@ createApp({
             if (this.useJsonMode) {
                 // JSON模式: 加载初始MUD输出
                 this.showLogin = false;
-                this.sendJsonCommand('init');
+                this.sendJsonCommand('look');  // 使用 look 而不是 init
             } else {
                 // iframe模式: 设置iframe URL
                 this.gameFrameUrl = this.getGameFrameUrl();
