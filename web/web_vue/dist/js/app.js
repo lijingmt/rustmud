@@ -205,17 +205,32 @@ createApp({
         connectionStatus() {
             return this.showLogin ? '未连接' : '已连接';
         },
-        // 当前房间名称（从消息中解析）
-        currentRoomName() {
-            if (!this.state.messages || this.state.messages.length === 0) return '未知';
-            // 从第一条消息中提取房间名称（通常是绿色加粗的文本）
-            const firstMsg = this.state.messages[0];
-            if (!firstMsg || !firstMsg.text) return '未知';
-            // 移除颜色代码获取纯文本
-            const text = firstMsg.text.replace(/§[A-Z]/g, '').replace(/§N/g, '').trim();
-            // 第一行通常是房间名称
-            const lines = text.split('\\n');
-            return lines[0] || '未知';
+        // MUD 容器高度
+        mudContainerHeight() {
+            return Math.max(300, window.innerHeight - 200);
+        },
+        // 解析 MUD 行为可渲染的格式
+        parsedMudLines() {
+            const lines = [];
+
+            // 如果有 state.messages，从那里解析
+            if (this.state.messages && this.state.messages.length > 0) {
+                for (const msg of this.state.messages) {
+                    if (!msg.text) continue;
+                    // 将消息文本按行分割
+                    const textLines = msg.text.replace(/\\n/g, '\n').split('\n');
+                    for (const line of textLines) {
+                        lines.push(this.parseMudLine(line));
+                    }
+                }
+            }
+
+            // 如果解析后没有内容，显示加载中
+            if (lines.length === 0) {
+                return [{ isEmpty: false, segments: [{ text: '正在加载...', isButton: false }] }];
+            }
+
+            return lines;
         }
     },
 
@@ -295,6 +310,92 @@ createApp({
             if (!firstMsg || !firstMsg.text) return '';
             // 简化：返回纯文本
             return this.renderColoredText(firstMsg.text).split('\\n')[0];
+        },
+
+        // 解析单行 MUD 输出，返回 segments 数组
+        parseMudLine(line) {
+            if (!line || line.trim() === '') {
+                return { isEmpty: true };
+            }
+
+            const segments = [];
+            let remaining = line;
+
+            // 匹配按钮模式: [命令] 或 **命令**
+            const buttonPattern = /\*\*([^*]+)\*\*/g;
+            let lastIndex = 0;
+            let match;
+
+            while ((match = buttonPattern.exec(line)) !== null) {
+                // 添加按钮前的文本
+                if (match.index > lastIndex) {
+                    const textBefore = line.substring(lastIndex, match.index);
+                    if (textBefore.trim()) {
+                        segments.push({
+                            text: textBefore,
+                            isButton: false
+                        });
+                    }
+                }
+
+                // 添加按钮
+                const buttonText = match[1];
+                let buttonClass = 'btn-outline-info';
+                let command = buttonText;
+
+                // 根据按钮内容确定样式和命令
+                if (buttonText.includes('北') || buttonText.includes('南') ||
+                    buttonText.includes('东') || buttonText.includes('西') ||
+                    buttonText.includes('上') || buttonText.includes('下')) {
+                    buttonClass = 'btn-outline-success';
+                    command = 'go ' + this.getDirectionFromText(buttonText);
+                } else if (buttonText.includes('商城') || buttonText.includes('拍卖')) {
+                    buttonClass = 'btn-outline-warning';
+                } else if (buttonText.includes('吃药')) {
+                    buttonClass = 'btn-outline-purple';
+                }
+
+                segments.push({
+                    text: buttonText,
+                    isButton: true,
+                    buttonClass: buttonClass,
+                    command: command
+                });
+
+                lastIndex = buttonPattern.lastIndex;
+            }
+
+            // 添加剩余文本
+            if (lastIndex < line.length) {
+                const textAfter = line.substring(lastIndex);
+                if (textAfter.trim()) {
+                    segments.push({
+                        text: textAfter,
+                        isButton: false
+                    });
+                }
+            }
+
+            // 如果没有找到任何按钮，整行作为文本
+            if (segments.length === 0) {
+                segments.push({
+                    text: line,
+                    isButton: false
+                });
+            }
+
+            return { isEmpty: false, segments };
+        },
+
+        // 从按钮文本中提取方向
+        getDirectionFromText(text) {
+            if (text.includes('北')) return 'north';
+            if (text.includes('南')) return 'south';
+            if (text.includes('东')) return 'east';
+            if (text.includes('西')) return 'west';
+            if (text.includes('上')) return 'up';
+            if (text.includes('下')) return 'down';
+            return 'north';
         },
 
         detectApiBase() {

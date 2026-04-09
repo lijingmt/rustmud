@@ -6,7 +6,7 @@
     <title>天下AI网游 - Vue版</title>
     <link rel="stylesheet" href="css/app.css">
 </head>
-<body>
+<body :class="{'dark-mode': theme === 'dark'}">
     <div id="app">
         <!-- 登录弹窗 -->
         <div class="modal-overlay" v-if="showLogin">
@@ -32,73 +32,100 @@
         <!-- 顶部状态栏 -->
         <header class="game-header" v-if="!showLogin">
             <div class="player-info">
-                <div class="player-main">
-                    <div class="player-name">{{ state.player?.name || '加载中...' }}</div>
-                    <div class="player-level">Lv.{{ state.player?.level || 0 }}</div>
+                <div class="player-info-line">
+                    <span class="player-fullid">{{ state.player?.name || '加载中...' }}</span>
+                    <span class="divider">·</span>
+                    <span class="player-name-cn">玩家</span>
+                    <span class="divider">·</span>
+                    <span class="server-info">1区</span>
+                    <span class="divider">·</span>
+                    <span class="autofight-status-text"> 自动战斗: 关</span>
+                </div>
+                <div class="player-stats">
+                    <div class="stat-bar">
+                        <span class="stat-label">生命</span>
+                        <div class="bar-container">
+                            <div class="bar-fill hp-bar" :style="{width: (state.player?.hpPercent || 0) + '%'}"></div>
+                        </div>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label">精神</span>
+                        <div class="bar-container">
+                            <div class="bar-fill spirit-bar" :style="{width: (state.player?.mpPercent || 0) + '%'}"></div>
+                        </div>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label">潜能</span>
+                        <div class="bar-container">
+                            <div class="bar-fill potential-bar" style="width: 100%;"></div>
+                        </div>
+                    </div>
+                    <div class="stat-bar">
+                        <span class="stat-label">内力</span>
+                        <div class="bar-container">
+                            <div class="bar-fill neili-bar" style="width: 100%;"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div class="status-bars" v-if="state.player">
-                <div class="status-bar">
-                    <div class="bar-label">HP</div>
-                    <div class="bar-track">
-                        <div class="bar-fill hp-bar" :style="{width: (state.player.hpPercent || 0) + '%'}"></div>
-                    </div>
-                    <div class="bar-value">{{ state.player.hp || 0 }}/{{ state.player.hpMax || 0 }}</div>
-                </div>
-                <div class="status-bar">
-                    <div class="bar-label">MP</div>
-                    <div class="bar-track">
-                        <div class="bar-fill mp-bar" :style="{width: (state.player.mpPercent || 0) + '%'}"></div>
-                    </div>
-                    <div class="bar-value">{{ state.player.mp || 0 }}/{{ state.player.mpMax || 0 }}</div>
+            <div class="header-actions">
+                <div class="header-menu-container">
+                    <button class="header-btn menu-btn" title="菜单" @click="toggleTheme">
+                        {{ theme === 'classic' ? '🏜️' : (theme === 'dark' ? '🌙' : '☀️') }}
+                    </button>
                 </div>
             </div>
         </header>
 
-        <!-- 主内容区 -->
-        <main class="game-content" ref="messageContainer" v-if="!showLogin">
-            <div v-for="msg in state.messages" :key="msg.id"
-                 :class="['message', 'message-' + msg.type]">
-                <span class="message-text">{{ msg.text }}</span>
+        <!-- 主游戏区域 - MUD输出容器 -->
+        <main class="game-frame-container" v-if="!showLogin">
+            <div class="mud-output-container" :class="{'dark-mode': theme === 'dark'}" :style="{minHeight: mudContainerHeight + 'px'}">
+                <div class="mud-parent">
+                    <div class="mud-child">
+                        <!-- 渲染 MUD 输出行 -->
+                        <div class="mud-line" v-for="(line, idx) in parsedMudLines" :key="idx">
+                            <!-- 空行 -->
+                            <br v-if="line.isEmpty">
+                            <!-- 文本行 -->
+                            <template v-else>
+                                <span v-for="(segment, sidx) in line.segments" :key="sidx">
+                                    <!-- 按钮片段 -->
+                                    <a v-if="segment.isButton"
+                                       href="#"
+                                       :class="['btn', 'btn-sm', 'mud-btn', segment.buttonClass]"
+                                       @click.prevent="sendCommand(segment.command)">
+                                        {{ segment.text }}
+                                    </a>
+                                    <!-- 纯文本片段 -->
+                                    <span v-else class="mud-text" :class="segment.textClass">
+                                        {{ segment.text }}
+                                    </span>
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
 
-        <!-- 操作按钮区 -->
-        <section class="game-actions" v-if="!showLogin && state.actions?.length">
-            <button v-for="action in state.actions" :key="action.id"
-                    class="btn btn-action"
-                    :class="'btn-' + (action.style || 'default')"
-                    @click="sendCommand(action.command)">
-                {{ action.label }}
+        <!-- 底部快捷操作栏 -->
+        <footer class="quick-actions" v-if="!showLogin">
+            <button class="quick-toggle-btn" title="折叠菜单" @click="quickActionsCollapsed = !quickActionsCollapsed">
+                {{ quickActionsCollapsed ? '▲' : '▼' }}
             </button>
-        </section>
-
-        <!-- 方向导航 -->
-        <nav class="game-navigation" v-if="!showLogin && state.navigation?.exits">
-            <button v-for="exit in state.navigation.exits" :key="exit.direction"
-                    class="nav-btn" @click="sendCommand(exit.command)">
-                <span class="nav-icon">{{ getNavIcon(exit.label) }}</span>
-                <span class="nav-label">{{ exit.label }}</span>
-            </button>
-        </nav>
-
-        <!-- 命令输入区 -->
-        <footer class="game-input" v-if="!showLogin">
-            <input type="text" class="cmd-input" v-model="inputCommand"
-                   @keyup.enter="sendCommand(inputCommand)"
-                   placeholder="输入命令..." :disabled="isLoading"
-                   ref="cmdInput">
-            <button class="send-btn" @click="sendCommand(inputCommand)" :disabled="isLoading">
-                发送
-            </button>
+            <div class="quick-actions-inner" v-show="!quickActionsCollapsed">
+                <button class="quick-btn" @click="sendCommand('look')">👁️ 查看</button>
+                <button class="quick-btn" @click="sendCommand('use 小生命药水')">💊 吃药</button>
+                <button class="quick-btn" @click="sendCommand('score')">❤️ 状态</button>
+                <button class="quick-btn" @click="sendCommand('inventory')">🎒 背包</button>
+                <button class="quick-btn" @click="sendCommand('skills')">⚔️ 武功</button>
+                <button class="quick-btn" @click="sendCommand('tasks')">📜 任务</button>
+                <button class="quick-btn" @click="sendCommand('shop')">🛒 商城</button>
+                <button class="quick-btn" @click="sendCommand('functions')">🎮 功能</button>
+                <button class="quick-btn" @click="sendCommand('settings')">⚙️ 设置</button>
+                <button class="quick-btn" @click="sendCommand('call horse')">🐎 唤马</button>
+            </div>
         </footer>
-
-        <!-- 连接状态 -->
-        <div class="connection-status" :class="{connected: !showLogin, disconnected: showLogin}">
-            <span class="status-dot"></span>
-            {{ connectionStatus }}
-        </div>
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
