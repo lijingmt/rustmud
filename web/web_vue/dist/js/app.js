@@ -288,6 +288,9 @@ createApp({
 
             this.parsedMudLinesData = lines;
             console.log('[updateParsedMudLines] updated parsedMudLinesData:', lines.length);
+            console.log('[updateParsedMudLines] lines[0]:', lines[0]);
+            // 强制触发 Vue 更新
+            this.$forceUpdate();
         },
 
         // 重新应用翻译（用于 mudLines 更新后）
