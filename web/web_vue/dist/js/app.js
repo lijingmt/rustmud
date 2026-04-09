@@ -209,18 +209,51 @@ createApp({
         mudContainerHeight() {
             return Math.max(300, window.innerHeight - 200);
         },
-        // 解析 MUD 行为可渲染的格式
+        // 解析 MUD 行为可渲染的格式 - 直接使用 mudLines
         parsedMudLines() {
             const lines = [];
 
-            // 如果有 state.messages，从那里解析
-            if (this.state.messages && this.state.messages.length > 0) {
-                for (const msg of this.state.messages) {
-                    if (!msg.text) continue;
-                    // 将消息文本按行分割
-                    const textLines = msg.text.replace(/\\n/g, '\n').split('\n');
-                    for (const line of textLines) {
-                        lines.push(this.parseMudLine(line));
+            // 优先使用 mudLines（这个总是在命令执行后更新）
+            if (this.mudLines && this.mudLines.length > 0) {
+                for (const mudLine of this.mudLines) {
+                    if (mudLine.type === 'empty') {
+                        lines.push({ isEmpty: true });
+                        continue;
+                    }
+                    if (mudLine.type === 'line' && mudLine.segments) {
+                        // 解析 segments
+                        const segments = [];
+                        for (const seg of mudLine.segments) {
+                            if (seg.type === 'text') {
+                                // 检查是否是按钮
+                                const buttonMatch = seg.text.match(/\*\*([^*]+)\*\*/);
+                                if (buttonMatch) {
+                                    segments.push({
+                                        text: buttonMatch[1],
+                                        isButton: true,
+                                        buttonClass: this.getButtonStyle(buttonMatch[1]),
+                                        command: this.getButtonCommand(buttonMatch[1])
+                                    });
+                                } else {
+                                    // 移除颜色代码的纯文本
+                                    segments.push({
+                                        text: seg.text.replace(/§[A-Z]/g, '').replace(/§N/g, ''),
+                                        isButton: false
+                                    });
+                                }
+                            } else if (seg.type === 'link') {
+                                // 链接类型 - 转换为按钮
+                                segments.push({
+                                    text: seg.text || seg.label || '链接',
+                                    isButton: true,
+                                    buttonClass: this.getButtonStyle(seg.label || ''),
+                                    command: seg.command || seg.cmd || seg.label || ''
+                                });
+                            }
+                        }
+                        if (segments.length > 0) {
+                            lines.push({ isEmpty: false, segments });
+                        }
                     }
                 }
             }
@@ -230,7 +263,35 @@ createApp({
                 return [{ isEmpty: false, segments: [{ text: '正在加载...', isButton: false }] }];
             }
 
+            console.log('[parsedMudLines] lines count:', lines.length);
             return lines;
+        },
+
+        // 获取按钮样式
+        getButtonStyle(text) {
+            if (text.includes('北') || text.includes('南') ||
+                text.includes('东') || text.includes('西') ||
+                text.includes('上') || text.includes('下')) {
+                return 'btn-outline-success';
+            }
+            if (text.includes('商城') || text.includes('拍卖') || text.includes('杀戮')) {
+                return 'btn-outline-warning';
+            }
+            if (text.includes('吃药')) {
+                return 'btn-outline-purple';
+            }
+            return 'btn-outline-info';
+        },
+
+        // 获取按钮命令
+        getButtonCommand(text) {
+            if (text.includes('北')) return 'go north';
+            if (text.includes('南')) return 'go south';
+            if (text.includes('东')) return 'go east';
+            if (text.includes('西')) return 'go west';
+            if (text.includes('上')) return 'go up';
+            if (text.includes('下')) return 'go down';
+            return text;
         }
     },
 
