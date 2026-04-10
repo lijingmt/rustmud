@@ -815,6 +815,14 @@ createApp({
                         console.log('[Login] State updated, messages count:', this.state.messages.length);
                     }
 
+                    // 更新导航按钮（与 sendJsonCommand 保持一致）
+                    if (data.state && data.state.navigation) {
+                        this.navigation = data.state.navigation.exits || [];
+                    } else if (data.navigation) {
+                        this.navigation = data.navigation;
+                    }
+                    console.log('[Login] 导航按钮:', this.navigation);
+
                     // 隐藏登录界面
                     this.showLogin = false;
 

@@ -118,7 +118,50 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 战斗中的额外操作按钮 -->
+            <div class="battle-extra-actions" v-if="isInBattle && !showLogin">
+                <a href="#" class="btn btn-outline-info btn-sm mud-btn" @click.prevent="sendCommand('battle_status')">察看战况</a>
+                <span class="mud-text"> </span>
+                <a href="#" class="btn btn-outline-info btn-sm mud-btn" @click.prevent="sendCommand('special_attack')">特殊攻击</a>
+                <span class="mud-text"> </span>
+                <a href="#" class="btn btn-outline-info btn-sm mud-btn" @click.prevent="sendCommand('surrender')">投降</a>
+                <span class="mud-text"> </span>
+                <a href="#" class="btn btn-outline-info btn-sm mud-btn" @click.prevent="sendCommand('escape')">逃跑</a>
+            </div>
         </main>
+
+        <!-- 战斗面板 - 迷你模式 -->
+        <div class="battle-panel mini-mode" v-if="isInBattle && !showLogin">
+            <div class="battle-mini">
+                <!-- 玩家方 -->
+                <div class="battle-side player-side">
+                    <span class="battle-name">{{ state.player?.name || '玩家' }}</span>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar-fill player-hp" :style="{width: (state.player?.hpPercent || 0) + '%'}"></div>
+                    </div>
+                    <span class="hp-text">{{ state.player?.hp || 0 }}/{{ state.player?.hpMax || 0 }}</span>
+                    <div class="neili-bar-container">
+                        <div class="neili-bar-fill player-neili" :style="{width: (state.player?.mpPercent || 0) + '%'}"></div>
+                    </div>
+                    <span class="neili-text">{{ state.player?.mp || 0 }}/{{ state.player?.mpMax || 0 }}</span>
+                </div>
+                <!-- VS 标志 -->
+                <div class="battle-vs">⚔️</div>
+                <!-- 敌方 -->
+                <div class="battle-side enemy-side">
+                    <span class="battle-name">{{ battleEnemy?.name || '敌人' }}</span>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar-fill enemy-hp" :style="{width: ((battleEnemy?.hp || 0) / (battleEnemy?.hpMax || 1) * 100) + '%'}"></div>
+                    </div>
+                    <span class="hp-text">{{ battleEnemy?.hp || 0 }}/{{ battleEnemy?.hpMax || '?' }}</span>
+                </div>
+                <!-- 展开按钮 -->
+                <button class="battle-toggle-btn" title="展开战斗面板" @click="battleFullscreen = !battleFullscreen">
+                    {{ battleFullscreen ? '▼' : '☰' }}
+                </button>
+            </div>
+        </div>
 
         <!-- 底部快捷操作栏 -->
         <footer class="quick-actions" v-if="!showLogin">
