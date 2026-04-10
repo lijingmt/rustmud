@@ -2956,7 +2956,17 @@ createApp({
             if (this.useJsonMode) {
                 // JSON模式: 加载初始MUD输出
                 this.showLogin = false;
-                this.sendJsonCommand('look');  // 使用 look 而不是 init
+                // 加载初始状态后检查是否在战斗中
+                this.sendJsonCommand('look').then(() => {
+                    // 检查战斗状态
+                    this.fetchBattleStatus().then(() => {
+                        // 如果在战斗中，启动战斗状态轮询
+                        if (this.battleEnemyFull && this.battleEnemyFull.hp !== null) {
+                            this.isInBattle = true;
+                            this.startBattleStatusPolling();
+                        }
+                    });
+                });
             } else {
                 // iframe模式: 设置iframe URL
                 this.gameFrameUrl = this.getGameFrameUrl();
