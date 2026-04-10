@@ -67,6 +67,9 @@ pub fn create_router() -> Router {
         .route("/api/user/{userid}", get(get_user_info))
         // Static files
         .route("/static/{*path}", get(static_files))
+        .route("/css/{*path}", get(static_files))
+        .route("/js/{*path}", get(static_files))
+        .route("/assets/{*path}", get(static_files))
         // Home page
         .route("/", get(index))
         .with_state(state)
@@ -1818,13 +1821,17 @@ pub async fn index() -> Html<String> {
 
 /// Static files handler - serves Vue app assets
 pub async fn static_files(
-    axum::extract::Path(path): axum::extract::Path<String>
+    axum::extract::Path(path): axum::extract::Path<String>,
+    uri: axum::extract::OriginalUri,
 ) -> Response {
     use std::path::Path;
     use axum::http::{StatusCode, HeaderValue, header};
 
-    // Remove leading slash if present
-    let path = path.trim_start_matches('/');
+    // Use the original URI path to preserve the directory structure
+    let full_path = uri.0.path();
+
+    // Remove leading slash
+    let path = full_path.trim_start_matches('/');
 
     // Try multiple possible paths for the dist directory
     let base_paths = [
@@ -1845,6 +1852,12 @@ pub async fn static_files(
                 "application/json"
             } else if path.ends_with(".html") {
                 "text/html"
+            } else if path.ends_with(".svg") {
+                "image/svg+xml"
+            } else if path.ends_with(".png") {
+                "image/png"
+            } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+                "image/jpeg"
             } else {
                 "text/plain"
             };
