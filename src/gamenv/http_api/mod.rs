@@ -64,6 +64,7 @@ pub fn create_router() -> Router {
         .route("/api/command", post(execute_command))
         .route("/api/invite/seturl", post(save_invite_url))  // Invite URL tracking
         .route("/api/status", get(get_status))
+        .route("/api/battle_status", get(get_battle_status))
         .route("/api/user/{userid}", get(get_user_info))
         // Static files
         .route("/static/{*path}", get(static_files))
@@ -1746,6 +1747,82 @@ pub async fn get_status() -> Json<serde_json::Value> {
         "version": "0.1.0",
         "engine": "RustMUD"
     }))
+}
+
+/// Get player battle status
+pub async fn get_battle_status(
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Json<serde_json::Value> {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    // Extract txd parameter
+    let txd = params.get("txd").map(|s| s.as_str());
+
+    // Get userid from txd
+    let userid = if let Some(txd_val) = txd {
+        let auth_mgr = crate::gamenv::http_api::auth::get_auth_manager();
+        match auth_mgr.lock() {
+            Ok(mgr) => mgr.decode_txd(txd_val).map(|d| d.userid),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    if userid.is_none() {
+        return Json(serde_json::json!({
+            "in_battle": false,
+            "error": "not_authenticated"
+        }));
+    }
+
+    let userid = userid.unwrap();
+
+    // Check if player is in battle
+    if let Some(battle) = PKD.get_player_battle(&userid).await {
+        let is_challenger = battle.challenger.id == userid;
+
+        // Determine player and enemy
+        let (player_stats, enemy_stats) = if is_challenger {
+            (&battle.challenger, &battle.defender)
+        } else {
+            (&battle.defender, &battle.challenger)
+        };
+
+        Json(serde_json::json!({
+            "in_battle": true,
+            "battle_id": battle.battle_id,
+            "status": format!("{:?}", battle.status),
+            "round": battle.round,
+            "player": {
+                "id": player_stats.id,
+                "name": player_stats.name,
+                "name_cn": player_stats.name_cn,
+                "hp": player_stats.hp,
+                "hp_max": player_stats.hp_max,
+                "qi": player_stats.qi,
+                "qi_max": player_stats.qi_max,
+                "level": player_stats.level,
+                "hp_percent": player_stats.hp_percent()
+            },
+            "enemy": {
+                "id": enemy_stats.id,
+                "name": enemy_stats.name,
+                "name_cn": enemy_stats.name_cn,
+                "hp": enemy_stats.hp,
+                "hp_max": enemy_stats.hp_max,
+                "qi": enemy_stats.qi,
+                "qi_max": enemy_stats.qi_max,
+                "level": enemy_stats.level,
+                "hp_percent": enemy_stats.hp_percent(),
+                "is_npc": enemy_stats.id.contains('/')
+            }
+        }))
+    } else {
+        Json(serde_json::json!({
+            "in_battle": false
+        }))
+    }
 }
 
 /// API error type
