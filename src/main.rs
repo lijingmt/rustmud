@@ -11,6 +11,19 @@ use gamenv::quest::QUESTD;
 use gamenv::single::daemons::pkd::{PkDaemon, get_pkd};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 初始化 tracing（必须在所有 tokio::spawn 之前）
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_target(false)
+        )
+        .with(tracing_subscriber::EnvFilter::new(
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string())
+        ))
+        .init();
+
     // 启动 rustenv 服务器
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
@@ -21,44 +34,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Failed to initialize quest system: {:?}", e);
         }
 
-        // 启动 PKD 心跳任务（处理NPC自动战斗）
+        // 获取 PKD 守护进程实例
         let pkd = get_pkd().await;
-        let heartbeat_handle = tokio::spawn(async {
+
+        // 启动三个任务，它们将同时运行
+        tokio::spawn(async move {
             tracing::info!("PKD heartbeat task started");
             PkDaemon::start_heartbeat_task(pkd).await;
+            eprintln!("PKD heartbeat task stopped unexpectedly");
         });
 
-        // 启动 HTTP API 服务器
-        let http_handle = tokio::spawn(async {
+        tokio::spawn(async {
             let router = http_api::create_router();
             let addr = "0.0.0.0:8081";
             tracing::info!("HTTP API listening on {}", addr);
-            let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-            axum::serve(listener, router).await.unwrap();
+            if let Ok(listener) = tokio::net::TcpListener::bind(addr).await {
+                if let Err(e) = axum::serve(listener, router).await {
+                    eprintln!("HTTP API server error: {:?}", e);
+                }
+            }
         });
 
-        // 启动游戏服务器
-        let game_handle = tokio::spawn(async {
+        tokio::spawn(async {
             let server = RustenvServer::new();
             if let Err(e) = server.run().await {
                 eprintln!("Game server error: {:?}", e);
             }
         });
 
-        // 等待任务
-        tokio::select! {
-            _ = heartbeat_handle => {
-                eprintln!("PKD heartbeat task stopped");
-                Ok(())
-            }
-            _ = http_handle => {
-                eprintln!("HTTP API server stopped");
-                Ok(())
-            }
-            _ = game_handle => {
-                eprintln!("Game server stopped");
-                Ok(())
-            }
-        }
+        // 主任务永远运行，等待 Ctrl+C 或其他信号
+        // 在生产环境中，应该使用 tokio::signal::ctrl_c() 等
+        tokio::time::sleep(tokio::time::Duration::from_secs(u64::MAX)).await;
+        Ok(())
     })
 }

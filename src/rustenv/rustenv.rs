@@ -92,8 +92,8 @@ impl RustenvServer {
         // 创建日志目录
         std::fs::create_dir_all(format!("{}/log", self.config.root))?;
 
-        // 初始化 tracing
-        tracing_subscriber::registry()
+        // 初始化 tracing（使用 try_init 避免重复初始化）
+        let _ = tracing_subscriber::registry()
             .with(
                 tracing_subscriber::fmt::layer()
                     .with_writer(std::io::stderr)
@@ -102,7 +102,7 @@ impl RustenvServer {
             .with(tracing_subscriber::EnvFilter::new(
                 std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string())
             ))
-            .init();
+            .try_init();
 
         Ok(())
     }
