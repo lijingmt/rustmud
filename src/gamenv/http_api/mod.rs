@@ -934,6 +934,8 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
 
 /// 查看命令
 async fn look_command(world: &crate::gamenv::world::GameWorld, room_id: &str) -> String {
+    use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
+
     tracing::info!("look_command called with room_id: '{}'", room_id);
     tracing::info!("World has {} rooms loaded", world.room_count());
 
@@ -941,20 +943,53 @@ async fn look_command(world: &crate::gamenv::world::GameWorld, room_id: &str) ->
         let mut output = format!("§Y{}§N\n", room.name);
         output.push_str(&format!("{}\n", room.long.trim()));
 
-        // 显示NPC
-        if !room.npcs.is_empty() {
+        // 初始化房间NPC（如果还没初始化）
+        {
+            let runtime_npc_d = get_runtime_npc_d().read().await;
+            if !room.npcs.is_empty() && runtime_npc_d.get_all_npcs(room_id).is_empty() {
+                drop(runtime_npc_d);
+                let mut runtime_npc_d_write = get_runtime_npc_d().write().await;
+                runtime_npc_d_write.init_room_npcs(room_id, &room.npcs);
+            }
+        }
+
+        // 获取运行时NPC守护进程
+        let runtime_npc_d = get_runtime_npc_d().read().await;
+
+        // 显示NPC - 过滤已死亡的
+        let alive_npcs = runtime_npc_d.get_alive_npcs(room_id);
+
+        if !alive_npcs.is_empty() {
             output.push_str("\n这里有以下人物：\n");
-            for npc_id in &room.npcs {
+            for npc_id in &alive_npcs {
                 if let Some(npc) = world.get_npc(npc_id) {
                     output.push_str(&format!("  {}\n", npc.format_short()));
                 }
             }
         }
 
+        // 显示已死亡的NPC（可选，显示复活时间）
+        let all_npc_states = runtime_npc_d.get_all_npcs(room_id);
+        let dead_npcs: Vec<_> = all_npc_states.iter()
+            .filter(|npc| !npc.is_alive)
+            .collect();
+
+        if !dead_npcs.is_empty() {
+            output.push_str("\n§C(已死亡的NPC)§N\n");
+            for npc_state in dead_npcs {
+                output.push_str(&format!("  §Y{}§N - {}\n",
+                    npc_state.template_id, npc_state.format_remaining()));
+            }
+        }
+
         // 显示怪物
-        if !room.monsters.is_empty() {
+        let alive_monsters: Vec<_> = room.monsters.iter()
+            .filter(|m| runtime_npc_d.is_npc_alive(m, room_id))
+            .collect();
+
+        if !alive_monsters.is_empty() {
             output.push_str("\n§R这里有危险的生物：§N\n");
-            for monster_id in &room.monsters {
+            for monster_id in &alive_monsters {
                 if let Some(monster) = world.get_npc(monster_id) {
                     output.push_str(&format!("  §R[怪物]{}§N\n", monster.short));
                 }

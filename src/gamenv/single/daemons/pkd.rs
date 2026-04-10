@@ -987,6 +987,9 @@ impl PkDaemon {
         let mut player_battles = self.player_battles.write().await;
 
         if let Some(battle) = battles.remove(battle_id) {
+            // 检查是否有NPC死亡，通知runtime_npc_d
+            Self::handle_npc_death(&battle).await;
+
             // 清理玩家映射
             println!("[PKD] Removing player mappings: {} and {}", battle.challenger.id, battle.defender.id);
             player_battles.remove(&battle.challenger.id);
@@ -996,6 +999,42 @@ impl PkDaemon {
         } else {
             println!("[PKD] Battle {} not found!", battle_id);
             None
+        }
+    }
+
+    /// 处理NPC死亡
+    async fn handle_npc_death(battle: &PkBattle) {
+        use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
+
+        // 检查防守者是否是NPC（ID格式为 room_id/npc_id）
+        let defender_id = &battle.defender.id;
+        let challenger_id = &battle.challenger.id;
+
+        // 判断哪个是NPC
+        let (npc_id, killed) = if defender_id.contains('/') {
+            (defender_id, !battle.defender.is_alive())
+        } else if challenger_id.contains('/') {
+            (challenger_id, !battle.challenger.is_alive())
+        } else {
+            return; // 双方都是玩家，不需要处理
+        };
+
+        if killed {
+            // 解析房间ID（NPC ID的第一部分是房间）
+            let parts: Vec<&str> = npc_id.split('/').collect();
+            let room_id = parts.first().unwrap_or(&"");
+
+            // 解析NPC模板ID（去掉房间前缀）
+            let template_id = npc_id.to_string();
+
+            tracing::info!(
+                "[PKD] NPC {} killed in room {}, notifying runtime_npc_d",
+                template_id, room_id
+            );
+
+            // 通知运行时NPC守护进程
+            let mut runtime_npc_d = get_runtime_npc_d().write().await;
+            runtime_npc_d.on_npc_killed(&template_id, room_id);
         }
     }
 

@@ -24,6 +24,7 @@ pub mod activityd;
 pub mod rebirthd;
 pub mod spawn_d;
 pub mod schoold;
+pub mod runtime_npc_d;
 
 pub use userd::*;
 pub use toptend::*;
@@ -48,3 +49,4 @@ pub use activityd::*;
 pub use rebirthd::*;
 pub use spawn_d::*;
 pub use schoold::*;
+pub use runtime_npc_d::*;
