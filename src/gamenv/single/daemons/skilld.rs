@@ -26,6 +26,20 @@ pub enum SkillType {
     Debuff,
 }
 
+impl std::fmt::Display for SkillType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SkillType::Passive => write!(f, "被动"),
+            SkillType::Active => write!(f, "主动"),
+            SkillType::Attack => write!(f, "攻击"),
+            SkillType::Defense => write!(f, "防御"),
+            SkillType::Heal => write!(f, "治疗"),
+            SkillType::Buff => write!(f, "辅助"),
+            SkillType::Debuff => write!(f, "减益"),
+        }
+    }
+}
+
 /// 技能
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Skill {
@@ -33,8 +47,12 @@ pub struct Skill {
     pub id: String,
     /// 技能名称
     pub name: String,
+    /// 技能中文名称
+    pub name_cn: String,
     /// 技能类型
     pub skill_type: SkillType,
+    /// 所属门派ID
+    pub school: String,
     /// 等级要求
     pub level_req: i32,
     /// 消耗MP
@@ -53,6 +71,9 @@ pub struct Skill {
     pub prerequisite: Option<String>,
     /// 最大等级
     pub max_level: u32,
+    /// 招式列表 (perform_id, required_level)
+    #[serde(default)]
+    pub performs: Vec<(String, u32)>,
 }
 
 impl Skill {
@@ -101,6 +122,9 @@ pub struct PlayerSkill {
     pub exp: u64,
     /// 学习时间
     pub learned_at: i64,
+    /// 已学会的招式列表
+    #[serde(default)]
+    pub learned_performs: Vec<String>,
 }
 
 impl PlayerSkill {
@@ -111,6 +135,7 @@ impl PlayerSkill {
             level: 1,
             exp: 0,
             learned_at: chrono::Utc::now().timestamp(),
+            learned_performs: Vec::new(),
         }
     }
 
@@ -156,7 +181,9 @@ impl SkillDaemon {
         let basic_attack = Skill {
             id: "skill_basic_attack".to_string(),
             name: "基础攻击".to_string(),
+            name_cn: "基础攻击".to_string(),
             skill_type: SkillType::Attack,
+            school: "wutang".to_string(),
             level_req: 1,
             mp_cost: 0,
             cooldown: 1,
@@ -166,13 +193,16 @@ impl SkillDaemon {
             description: "最基础的攻击技能，所有冒险者都会。".to_string(),
             prerequisite: None,
             max_level: 10,
+            performs: vec![],
         };
 
         // 火球术
         let fireball = Skill {
             id: "skill_fireball".to_string(),
             name: "火球术".to_string(),
+            name_cn: "火球术".to_string(),
             skill_type: SkillType::Attack,
+            school: "huashan".to_string(),
             level_req: 5,
             mp_cost: 20,
             cooldown: 3,
@@ -182,13 +212,16 @@ impl SkillDaemon {
             description: "向敌人投掷火球，造成大量魔法伤害。".to_string(),
             prerequisite: Some("skill_basic_attack".to_string()),
             max_level: 10,
+            performs: vec![],
         };
 
         // 治愈术
         let heal = Skill {
             id: "skill_heal".to_string(),
             name: "治愈术".to_string(),
+            name_cn: "治愈术".to_string(),
             skill_type: SkillType::Heal,
+            school: "wudang".to_string(),
             level_req: 3,
             mp_cost: 15,
             cooldown: 5,
@@ -198,13 +231,16 @@ impl SkillDaemon {
             description: "恢复自身HP值。".to_string(),
             prerequisite: None,
             max_level: 10,
+            performs: vec![],
         };
 
         // 强力防御
         let power_defense = Skill {
             id: "skill_power_defense".to_string(),
             name: "强力防御".to_string(),
+            name_cn: "强力防御".to_string(),
             skill_type: SkillType::Defense,
+            school: "shaolin".to_string(),
             level_req: 5,
             mp_cost: 10,
             cooldown: 10,
@@ -214,13 +250,16 @@ impl SkillDaemon {
             description: "暂时提升防御力，减少受到的伤害。".to_string(),
             prerequisite: None,
             max_level: 5,
+            performs: vec![],
         };
 
         // 暴击训练
         let crit_training = Skill {
             id: "skill_crit_training".to_string(),
             name: "暴击训练".to_string(),
+            name_cn: "暴击训练".to_string(),
             skill_type: SkillType::Passive,
+            school: "wutang".to_string(),
             level_req: 10,
             mp_cost: 0,
             cooldown: 0,
@@ -230,6 +269,7 @@ impl SkillDaemon {
             description: "被动技能：永久提升暴击率。".to_string(),
             prerequisite: Some("skill_basic_attack".to_string()),
             max_level: 5,
+            performs: vec![],
         };
 
         self.skills.insert(basic_attack.id.clone(), basic_attack);

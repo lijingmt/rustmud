@@ -23,6 +23,7 @@ pub mod malld;
 pub mod activityd;
 pub mod rebirthd;
 pub mod spawn_d;
+pub mod schoold;
 
 pub use userd::*;
 pub use toptend::*;
@@ -46,3 +47,4 @@ pub use malld::*;
 pub use activityd::*;
 pub use rebirthd::*;
 pub use spawn_d::*;
+pub use schoold::*;

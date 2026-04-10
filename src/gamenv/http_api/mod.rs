@@ -1981,7 +1981,7 @@ async fn exercise_command(
 
     // 增加技能经验（简化版，每次修炼获得1-3点经验）
     let exp_gain = (rand::random::<u32>() % 3) + 1;
-    let levelups = player_skill.add_exp(exp_gain as u64, skill);
+    let leveled_up = player_skill.add_exp(exp_gain as u64);
 
     let current_exp_needed = crate::gamenv::school::Skill::exp_needed_for_level(player_skill.level);
 
@@ -1990,8 +1990,8 @@ async fn exercise_command(
         skill.name_cn, exp_gain, player_skill.level, player_skill.exp, current_exp_needed
     );
 
-    if levelups > 0 {
-        result.push_str(&format!("§G恭喜！你提升了 {} 级！§N\n\n", levelups));
+    if leveled_up {
+        result.push_str(&format!("§G恭喜！你提升了 1 级！§N\n\n"));
 
         // 检查是否解锁了新招式
         let mut new_performs = Vec::new();
