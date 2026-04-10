@@ -759,9 +759,6 @@ impl PkBattle {
                 .as_secs() as i64 - self.start_time
         ));
 
-        // 标题放在最下面
-        output.push_str(&format!("\n§C========== PK战斗结束 =========§N"));
-
         output
     }
 
@@ -810,9 +807,6 @@ impl PkBattle {
         output.push_str(&format!("§R内力: {}/{}\n",
             self.defender.qi, self.defender.qi_max));
 
-        // 标题放在最下面
-        output.push_str(&format!("\n§C========== PK战斗进行中 =========§N"));
-
         output
     }
 
@@ -826,7 +820,7 @@ impl PkBattle {
         };
 
         // 操作按钮 - 放在最上面方便操作
-        output.push_str(&format!("§H【操作】§N\n"));
+        output.push_str(&format!("§H操作§N\n"));
 
         // 技能列表按钮 - 移除按钮内的颜色代码，避免解析问题
         output.push_str("[查看技能:skills]\n");
@@ -893,7 +887,100 @@ impl PkBattle {
             }
         }
 
-        output.push_str(&format!("\n§C========== PK战斗进行中 =========§N"));
+        output
+    }
+
+    /// 为指定玩家生成战斗状态（包含战斗日志）
+    pub fn generate_status_with_log(&self, player_id: &str, combat_log: &[String], skill_effect: Option<&String>) -> String {
+        let mut output = String::new();
+
+        let skills = match self.get_player_skills(player_id) {
+            Some(s) => s,
+            None => return "你不在战斗中！".to_string(),
+        };
+
+        // 操作按钮 - 放在最上面方便操作
+        output.push_str(&format!("§H操作§N\n"));
+
+        // 技能列表按钮 - 移除按钮内的颜色代码，避免解析问题
+        output.push_str("[查看技能:skills]\n");
+        output.push_str("[继续战斗:pk continue]\n");
+        output.push_str("[逃跑:escape]\n");
+        output.push_str("[投降:surrender]\n");
+        output.push_str("\n");
+
+        // 战斗日志 - 放在操作按钮下面
+        if !combat_log.is_empty() {
+            output.push_str(&format!("§H【本回合】§N\n"));
+            for log in combat_log {
+                output.push_str(log);
+                output.push_str("\n");
+            }
+
+            // 显示使用的技能效果
+            if let Some(effect) = skill_effect {
+                output.push_str(&format!("\n§Y技能效果: {}§N\n", effect));
+            }
+            output.push_str("\n");
+        }
+
+        // 显示已选择的技能（如果有）
+        if let Some(ref pending_skill_id) = self.pending_skills.get(player_id) {
+            if let Some(skill) = SKILLD.lock().ok().and_then(|s| s.get_skill(pending_skill_id).cloned()) {
+                output.push_str(&format!("§Y已选择技能: {}§N\n\n", skill.name_cn));
+            }
+        } else {
+            output.push_str("§c未选择技能（使用普通攻击）§N\n\n");
+        }
+
+        output.push_str(&format!("§Y回合: {}§N\n\n", self.round));
+
+        // 挑战者状态
+        let (challenger_hp_color, challenger_hp_end) = if self.challenger.hp_percent() > 50 {
+            ("§G", "§N")
+        } else if self.challenger.hp_percent() > 20 {
+            ("§Y", "§N")
+        } else {
+            ("§R", "§N")
+        };
+
+        output.push_str(&format!("§Y【挑战者】§N {} (Lv.{})\n",
+            self.challenger.name_cn, self.challenger.level));
+        output.push_str(&format!("§Y生命: {}{}/{}{} 内力: {}/{}\n",
+            challenger_hp_color, self.challenger.hp, self.challenger.hp_max, challenger_hp_end,
+            self.challenger.qi, self.challenger.qi_max));
+
+        // 防守者状态
+        let (defender_hp_color, defender_hp_end) = if self.defender.hp_percent() > 50 {
+            ("§G", "§N")
+        } else if self.defender.hp_percent() > 20 {
+            ("§Y", "§N")
+        } else {
+            ("§R", "§N")
+        };
+
+        output.push_str(&format!("\n§R【防守者】§N {} (Lv.{})\n",
+            self.defender.name_cn, self.defender.level));
+        output.push_str(&format!("§R生命: {}{}/{}{} 内力: {}/{}\n",
+            defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end,
+            self.defender.qi, self.defender.qi_max));
+
+        // 显示冷却中的技能
+        let all_skills = skills.get_skills_info();
+        let cooling_skills: Vec<_> = all_skills.iter()
+            .filter(|(_, cd, _)| *cd > 0)
+            .collect();
+
+        if !cooling_skills.is_empty() {
+            output.push_str(&format!("\n§c【冷却中】§N\n"));
+            for (skill_id, cd, _) in cooling_skills {
+                // Clone the skill to avoid lifetime issues
+                let skill = SKILLD.lock().ok().and_then(|s| s.get_skill(skill_id).cloned());
+                if let Some(skill) = skill {
+                    output.push_str(&format!("{} (冷却:{}回合)\n", skill.name_cn, cd));
+                }
+            }
+        }
 
         output
     }

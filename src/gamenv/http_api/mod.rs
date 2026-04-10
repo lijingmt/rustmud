@@ -1022,12 +1022,12 @@ async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str
             if let Some(npc) = world.get_npc(npc_id) {
                 if npc.id.contains(target) || npc.name.contains(target) || npc.short.contains(target) {
                     found_npc = true;
-                    output.push_str(&format!("§Y========== {} =========§N\n", npc.name));
-                    output.push_str(&format!("§C【等级】§N {}\n", npc.level));
-                    output.push_str(&format!("§C【描述】§N {}\n", npc.long));
+                    output.push_str(&format!("§Y{}§N\n\n", npc.name));
+                    output.push_str(&format!("§C等级§N {}\n", npc.level));
+                    output.push_str(&format!("§C描述§N {}\n\n", npc.long));
 
                     // 根据NPC类型显示不同的操作按钮
-                    output.push_str(&format!("\n§H【操作】§N\n"));
+                    output.push_str(&format!("§H操作§N\n"));
 
                     // 对话按钮
                     output.push_str(&format!("[对话:talk {}]\n", npc.id));
@@ -1048,8 +1048,7 @@ async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str
                     // 任务按钮
                     output.push_str(&format!("[任务:quest {}]\n", npc.id));
 
-                    output.push_str(&format!("\n§H========== 返回 =========§N\n"));
-                    output.push_str("[返回房间:look]\n");
+                    output.push_str(&format!("\n[返回房间:look]\n"));
                     break;
                 }
             }
@@ -1061,17 +1060,16 @@ async fn look_npc_command(world: &crate::gamenv::world::GameWorld, room_id: &str
                 if let Some(monster) = world.get_npc(monster_id) {
                     if monster.id.contains(target) || monster.name.contains(target) || monster.short.contains(target) {
                         found_npc = true;
-                        output.push_str(&format!("§Y========== {} =========§N\n", monster.name));
-                        output.push_str(&format!("§C【等级】§N {}\n", monster.level));
-                        output.push_str(&format!("§C【生命值】§N {}/{}\n", monster.hp, monster.hp_max));
-                        output.push_str(&format!("§C【描述】§N {}\n", monster.long));
+                        output.push_str(&format!("§Y{}§N\n\n", monster.name));
+                        output.push_str(&format!("§C等级§N {}\n", monster.level));
+                        output.push_str(&format!("§C生命值§N {}/{}\n", monster.hp, monster.hp_max));
+                        output.push_str(&format!("§C描述§N {}\n\n", monster.long));
 
                         // 怪物只有攻击选项
-                        output.push_str(&format!("\n§H【操作】§N\n"));
+                        output.push_str(&format!("§H操作§N\n"));
                         output.push_str(&format!("[§R攻击§N:kill {}]\n", monster.id));
 
-                        output.push_str(&format!("\n§H========== 返回 =========§N\n"));
-                        output.push_str("[返回房间:look]\n");
+                        output.push_str(&format!("\n[返回房间:look]\n"));
                         break;
                     }
                 }
@@ -1442,40 +1440,17 @@ async fn pk_continue_command(userid: &str) -> String {
                     } else {
                         // 战斗继续：使用新的带技能的状态显示
                         println!("[PK_CONTINUE] Battle continuing, getting status");
-                        let mut output = if let Some(status) = PKD.get_player_battle_status(userid).await {
-                            println!("[PK_CONTINUE] Got status from PKD, length: {}", status.len());
-                            status
+                        let updated_battle = PKD.get_player_battle(userid).await;
+                        if let Some(b) = updated_battle {
+                            // 使用带战斗日志的状态生成函数
+                            let skill_effect_ref = round.skill_effect.as_ref();
+                            let output = b.generate_status_with_log(userid, &round.log, skill_effect_ref);
+                            println!("[PK_CONTINUE] Generated status with log, length: {}", output.len());
+                            output
                         } else {
-                            // Fallback - 直接获取战斗并生成带技能的状态
-                            println!("[PK_CONTINUE] No status from PKD, getting battle directly");
-                            let updated_battle = PKD.get_player_battle(userid).await;
-                            if let Some(b) = updated_battle {
-                                let status = b.generate_status_for_player(userid);
-                                println!("[PK_CONTINUE] Generated status from battle, length: {}", status.len());
-                                status
-                            } else {
-                                println!("[PK_CONTINUE] ERROR: Cannot get battle!");
-                                "无法获取战斗状态！\n[返回:look]".to_string()
-                            }
-                        };
-
-                        // 添加战斗日志到最下面
-                        output.push_str("\n────────────────────────────\n");
-                        output.push_str("§H【本回合】§N\n");
-                        for log in &round.log {
-                            output.push_str(log);
-                            output.push_str("\n");
+                            println!("[PK_CONTINUE] ERROR: Cannot get battle!");
+                            "无法获取战斗状态！\n[返回:look]".to_string()
                         }
-
-                        // 显示使用的技能
-                        if let Some(ref skill) = round.skill_used {
-                            if let Some(ref effect) = round.skill_effect {
-                                output.push_str(&format!("\n§Y技能效果: {}§N\n", effect));
-                            }
-                        }
-
-                        println!("[PK_CONTINUE] Final output length: {}", output.len());
-                        output
                     }
                 } else {
                     println!("[PK_CONTINUE] next_round returned None");
