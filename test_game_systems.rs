@@ -1,14 +1,14 @@
 // test_game_systems.rs - 测试游戏系统
 // 测试所有已实现的游戏模块
 
-use rustmud::gamenv::combat::*;
 use rustmud::gamenv::combat::skill::*;
-use rustmud::gamenv::item::*;
+use rustmud::gamenv::combat::*;
+use rustmud::gamenv::d::*;
+use rustmud::gamenv::guild::*;
 use rustmud::gamenv::item::equipment::*;
+use rustmud::gamenv::item::*;
 use rustmud::gamenv::npc::*;
 use rustmud::gamenv::quest::*;
-use rustmud::gamenv::guild::*;
-use rustmud::gamenv::d::*;
 use rustmud::gamenv::user::*;
 
 fn main() {
@@ -69,15 +69,26 @@ fn test_equipment_system() {
 
     // 测试装备境界
     let realm = EquipRealm::from_level(50);
-    println!("  - 等级50对应境界: {} {}", realm.color_code(), realm.name());
+    println!(
+        "  - 等级50对应境界: {} {}",
+        realm.color_code(),
+        realm.name()
+    );
 
     // 测试装备属性计算
     let stats = EquipStats::calculate(50, ItemQuality::Rare, EquipSlot::Weapon);
-    println!("  - 稀有武器属性: 攻击{} 暴击{}%", stats.attack, stats.crit_rate);
+    println!(
+        "  - 稀有武器属性: 攻击{} 暴击{}%",
+        stats.attack, stats.crit_rate
+    );
 
     // 测试装备栏
     let mut equip_slots = EquipmentSlots::default();
-    let equip = Equipment::new("iron_sword".to_string(), "铁剑".to_string(), EquipSlot::Weapon);
+    let equip = Equipment::new(
+        "iron_sword".to_string(),
+        "铁剑".to_string(),
+        EquipSlot::Weapon,
+    );
     equip_slots.equip(EquipSlot::Weapon, equip).unwrap();
 
     let total_stats = equip_slots.total_stats();
@@ -91,13 +102,21 @@ fn test_combat_system() {
     let attacker_stats = CombatStats::for_level(10);
     let defender_stats = CombatStats::for_level(10);
 
-    println!("  - 攻击者: HP{} 攻击{} 防御{}", attacker_stats.hp, attacker_stats.attack, attacker_stats.defense);
-    println!("  - 防御者: HP{} 攻击{} 防御{}", defender_stats.hp, defender_stats.attack, defender_stats.defense);
+    println!(
+        "  - 攻击者: HP{} 攻击{} 防御{}",
+        attacker_stats.hp, attacker_stats.attack, attacker_stats.defense
+    );
+    println!(
+        "  - 防御者: HP{} 攻击{} 防御{}",
+        defender_stats.hp, defender_stats.attack, defender_stats.defense
+    );
 
     // 计算伤害
     let result = attacker_stats.calculate_damage(&defender_stats);
-    println!("  - 伤害结果: {} (暴击:{}, 未命中:{}, 闪避:{})",
-        result.damage, result.is_crit, result.is_miss, result.is_dodge);
+    println!(
+        "  - 伤害结果: {} (暴击:{}, 未命中:{}, 闪避:{})",
+        result.damage, result.is_crit, result.is_miss, result.is_dodge
+    );
 
     // 渲染伤害描述
     println!("  - 伤害描述: {}\n", result.description());
@@ -125,11 +144,15 @@ fn test_item_system() {
     println!("【5. 测试物品系统】");
 
     // 创建物品
-    let item = Item::new("health_potion".to_string(), "生命药水".to_string(), ItemType::Medicine)
-        .with_quality(ItemQuality::Uncommon)
-        .with_level(10)
-        .with_quantity(5)
-        .with_max_stack(99);
+    let item = Item::new(
+        "health_potion".to_string(),
+        "生命药水".to_string(),
+        ItemType::Medicine,
+    )
+    .with_quality(ItemQuality::Uncommon)
+    .with_level(10)
+    .with_quantity(5)
+    .with_max_stack(99);
 
     println!("  - 物品名称: {}", item.render_name());
 
@@ -138,11 +161,15 @@ fn test_item_system() {
     println!("  - 等级50对应品质: {}", quality.name());
 
     // 测试物品堆叠
-    let item2 = Item::new("health_potion".to_string(), "生命药水".to_string(), ItemType::Medicine)
-        .with_quality(ItemQuality::Uncommon)
-        .with_level(10)
-        .with_quantity(3)
-        .with_max_stack(99);
+    let item2 = Item::new(
+        "health_potion".to_string(),
+        "生命药水".to_string(),
+        ItemType::Medicine,
+    )
+    .with_quality(ItemQuality::Uncommon)
+    .with_level(10)
+    .with_quantity(3)
+    .with_max_stack(99);
 
     let can_stack = item.can_stack_with(&item2);
     println!("  - 能否堆叠: {}\n", can_stack);
@@ -152,51 +179,93 @@ fn test_npc_system() {
     println!("【6. 测试NPC系统】");
 
     // 创建NPC (使用NpcBase)
-    let npc = NpcBase::new("npc_shopkeeper".to_string(), "店小二".to_string(), NpcType::Normal);
+    let npc = NpcBase::new(
+        "npc_shopkeeper".to_string(),
+        "店小二".to_string(),
+        NpcType::Normal,
+    );
     println!("  - NPC名称: {} (Lv.{})", npc.name_cn, npc.level);
 
     // 创建怪物 (使用Monster::new with 3 params)
     let monster = Monster::new("slime".to_string(), "史莱姆".to_string(), 5);
-    println!("  - 怪物: {} (Lv.{}, {})", monster.npc.base.name_cn, monster.npc.base.level, monster.rarity.name());
+    println!(
+        "  - 怪物: {} (Lv.{}, {})",
+        monster.npc.base.name_cn,
+        monster.npc.base.level,
+        monster.rarity.name()
+    );
 
     // 渲染怪物属性 - 使用combat字段
-    println!("  - 怪物HP: {} 攻击: {}", monster.npc.combat.hp, monster.npc.combat.attack);
+    println!(
+        "  - 怪物HP: {} 攻击: {}",
+        monster.npc.combat.hp, monster.npc.combat.attack
+    );
 }
 
 fn test_quest_system() {
     println!("【7. 测试任务系统】");
 
-    // 创建任务
-    let quest = Quest::new("quest_test".to_string(), "测试任务".to_string(), QuestType::Main)
-        .with_description("这是一个测试任务。".to_string())
-        .with_objective(QuestObjective::new(QuestObjectiveType::KillMonster, "slime".to_string(), 10));
+    use rustmud::gamenv::quest::{Quest, QuestType, RewardType};
 
-    println!("  - 任务: {} ({})", quest.name_cn, quest.id);
-    println!("  - 任务描述: {}", quest.description);
+    // 创建击杀任务
+    let quest = Quest::new(
+        "quest_test".to_string(),
+        QuestType::Kill,
+        "shopkeeper".to_string(),
+        "史莱姆".to_string(),
+        10,
+        1,
+    )
+    .with_talks(
+        "请帮我们消灭10只史莱姆！",
+        "谢谢你完成了任务！",
+        "现在还不是休息的时候。",
+    )
+    .with_reward(RewardType::Add {
+        attr: "exp".to_string(),
+        amount: 100,
+    });
 
-    // 测试任务接受
+    println!("  - 任务ID: {}", quest.id);
+    println!("  - 任务类型: {}", quest.quest_type.cn_name());
+    println!("  - 任务目标: {} x{}", quest.target_object, quest.target_amount);
+    println!("  - 任务奖励: {:?}", quest.reward);
+
+    // 测试任务进度
     let mut quest_clone = quest.clone();
-    quest_clone.accept().unwrap();
-    println!("  - 任务状态: {:?}", quest_clone.status);
+    quest_clone.add_progress(5);
+    println!("  - 任务进度: {}/{}", quest_clone.current_amount, quest_clone.target_amount);
+
+    quest_clone.add_progress(5);
+    println!("  - 任务是否完成: {}", quest_clone.is_completed());
 
     // 测试任务类型
-    println!("  - 任务类型: {:?}", quest_clone.quest_type);
+    println!("  - 任务类型: {}", quest_clone.quest_type.as_str());
 
-    println!("  - 任务渲染:\n{}", quest_clone.render_info());
+    println!("  - 任务渲染:\n{}", quest_clone.render());
 }
 
 fn test_guild_system() {
     println!("【8. 测试帮派系统】");
 
     // 创建帮派
-    let guild = Guild::new("guild_test".to_string(), "测试帮派".to_string(), "player1".to_string(), "帮主".to_string());
+    let guild = Guild::new(
+        "guild_test".to_string(),
+        "测试帮派".to_string(),
+        "player1".to_string(),
+        "帮主".to_string(),
+    );
     println!("  - 帮派名称: {}", guild.name);
     println!("  - 帮主: {}", guild.leader_id);
     println!("  - 最大成员数: {}", guild.max_members);
     println!("  - 当前成员数: {}", guild.member_count());
 
     // 测试帮派职位
-    println!("  - 帮主权限: 可解散={}, 可邀请={}", GuildRank::Leader.can_disband(), GuildRank::Leader.can_invite());
+    println!(
+        "  - 帮主权限: 可解散={}, 可邀请={}",
+        GuildRank::Leader.can_disband(),
+        GuildRank::Leader.can_invite()
+    );
 
     // 测试玩家帮派数据
     let mut player_guild = PlayerGuildData::default();
@@ -219,9 +288,13 @@ fn test_user_system() {
     user.add_item(item).unwrap();
 
     // 测试装备
-    let weapon_item = Item::new("iron_sword".to_string(), "铁剑".to_string(), ItemType::Weapon)
-        .with_quality(ItemQuality::Common)
-        .with_level(1);
+    let weapon_item = Item::new(
+        "iron_sword".to_string(),
+        "铁剑".to_string(),
+        ItemType::Weapon,
+    )
+    .with_quality(ItemQuality::Common)
+    .with_level(1);
     user.add_item(weapon_item).unwrap();
 
     // 测试战斗属性

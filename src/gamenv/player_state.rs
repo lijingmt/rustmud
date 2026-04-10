@@ -2,6 +2,7 @@
 // 对应 txpike9 中的用户状态存储
 
 use crate::gamenv::world::ItemTemplate;
+use crate::gamenv::school::PlayerSkill;
 use crate::core::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -53,6 +54,18 @@ pub struct PlayerState {
     pub last_save: i64,
     /// 在线状态
     pub online: bool,
+    /// 门派ID
+    #[serde(default)]
+    pub school: Option<String>,
+    /// 门派中的职位
+    #[serde(default)]
+    pub school_rank: Option<String>,
+    /// 已学技能 (skill_id -> PlayerSkill)
+    #[serde(default)]
+    pub skills: HashMap<String, PlayerSkill>,
+    /// 潜能值 (用于学习技能)
+    #[serde(default)]
+    pub potential: u64,
 }
 
 /// 任务进度
@@ -95,6 +108,10 @@ impl PlayerState {
             completed_quests: Vec::new(),
             last_save: chrono::Utc::now().timestamp(),
             online: true,
+            school: None,
+            school_rank: None,
+            skills: HashMap::new(),
+            potential: 100, // 初始潜能值
         }
     }
 

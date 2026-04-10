@@ -922,6 +922,10 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             // schools命令 - 查看所有门派
             schools_command().await
         }
+        "quest" | "quests" => {
+            // quest命令 - 查看任务列表
+            quest_command(&player_state, args).await
+        }
         _ => {
             format!("§R未知命令: {}§N\n输入「help」查看可用命令。", cmd)
         }
@@ -1131,7 +1135,8 @@ async fn talk_command(
     if let Some(room) = world.get_room(room_id) {
         for npc_id in &room.npcs {
             if let Some(npc) = world.get_npc(npc_id) {
-                if npc.name.contains(target) || npc.short.contains(target) {
+                // 检查ID、name或short是否匹配
+                if npc.id == target || npc.name.contains(target) || npc.short.contains(target) {
                     return format_npc_dialog(&npc, "");
                 }
             }
@@ -1149,7 +1154,8 @@ async fn kill_command(
     if let Some(room) = world.get_room(room_id) {
         for monster_id in &room.monsters {
             if let Some(monster) = world.get_npc(monster_id) {
-                if monster.name.contains(target) || monster.short.contains(target) {
+                // 检查ID、name或short是否匹配
+                if monster.id == target || monster.name.contains(target) || monster.short.contains(target) {
                     return format!("§R你开始攻击{}！§N\n{}", monster.short, combat_round(target, monster));
                 }
             }
@@ -1560,6 +1566,124 @@ fn use_item_command(item: &str, _userid: &str) -> String {
 /// 装备物品命令
 fn equip_item_command(item: &str, userid: &str) -> String {
     format!("§Y{}§N 装备了 {}。\n", userid, item)
+}
+
+/// 任务命令
+async fn quest_command(player_state: &Arc<tokio::sync::RwLock<crate::gamenv::player_state::PlayerState>>, args: &[&str]) -> String {
+    use crate::gamenv::quest::{QuestDaemon, PlayerQuestData, Quest, QuestType, QUESTD};
+    use std::collections::HashMap;
+
+    let mut state = player_state.write().await;
+
+    // 如果有参数，可能是 quest <npc_id> 格式（从NPC的任务按钮触发）
+    if !args.is_empty() {
+        let npc_id = args[0];
+
+        // 尝试从任务守护进程获取任务
+        let player_level = state.level as i32;
+
+        // 创建临时玩家任务数据
+        let mut temp_quest_data = PlayerQuestData {
+            pending_quests: HashMap::new(),
+            main_quests: HashMap::new(),
+            quest_cache: HashMap::new(),
+        };
+
+        // 从已有的任务迁移
+        for existing_quest in &state.active_quests {
+            temp_quest_data.pending_quests.insert(
+                existing_quest.quest_id.clone(),
+                Quest {
+                    id: existing_quest.quest_id.clone(),
+                    quest_type: QuestType::Kill, // 简化处理
+                    target_npc: existing_quest.target.clone(),
+                    target_object: existing_quest.target.clone(),
+                    target_amount: existing_quest.target_count as i32,
+                    current_amount: existing_quest.current as i32,
+                    quest_talk: String::new(),
+                    finish_talk: String::new(),
+                    npc_talk: String::new(),
+                    reward: crate::gamenv::quest::RewardType::Add {
+                        attr: "exp".to_string(),
+                        amount: existing_quest.reward_exp as i32,
+                    },
+                    quest_name: existing_quest.quest_id.clone(),
+                    required_level: 1000,
+                    is_main_quest: false,
+                    main_line_name: None,
+                    delete_name: None,
+                },
+            );
+        }
+
+        // 获取任务
+        let daemon = &QUESTD;
+        if let Some(quest) = daemon.assign_quest(npc_id, player_level, &temp_quest_data).await {
+            // 添加任务到玩家状态
+            state.add_quest(crate::gamenv::player_state::QuestProgress {
+                quest_id: quest.id.clone(),
+                target: quest.target_object.clone(),
+                target_count: quest.target_amount,
+                current: quest.current_amount,
+                reward_exp: match &quest.reward {
+                    crate::gamenv::quest::RewardType::Add { attr, amount } => {
+                        if attr == "exp" { *amount as u32 } else { 100 }
+                    }
+                    _ => 100,
+                },
+                reward_gold: 0,
+            });
+
+            return format!(
+                "§H【任务接受】§N\n\n{}：{}\n\n目标: {}\n\n§Y任务已添加到你的任务列表！§N\n\n[查看任务:quest][返回:look]",
+                quest.quest_type.cn_name(),
+                quest.target_object,
+                quest.render()
+            );
+        } else {
+            return format!(
+                "§H【任务系统】§N\n\n{} 目前没有可接受的任务。\n\n§c提示:§N 你可能需要先完成其他任务或提升等级。\n\n[返回:look]",
+                npc_id
+            );
+        }
+    }
+
+    // 无参数：显示当前任务列表
+    let mut output = String::from("§H【当前任务】§N\n\n");
+
+    if state.active_quests.is_empty() {
+        output.push_str("§c你目前没有进行中的任务。§N\n\n");
+        output.push_str("§H提示:§N 与NPC对话可以接受任务。\n\n");
+    } else {
+        output.push_str("进行中的任务:\n\n");
+
+        for (idx, quest) in state.active_quests.iter().enumerate() {
+            let status = if quest.current >= quest.target_count {
+                "§g[可完成]§r"
+            } else {
+                &(format!("§Y进度: {}/{}§r", quest.current, quest.target_count))
+            };
+
+            output.push_str(&format!(
+                "{}. {} - {} {}\n",
+                idx + 1,
+                quest.quest_id,
+                quest.target,
+                status
+            ));
+        }
+
+        output.push_str("\n§c提示:§N 完成任务目标后，返回任务发布者处领取奖励。\n");
+    }
+
+    // 显示已完成的任务数量
+    if !state.completed_quests.is_empty() {
+        output.push_str(&format!("\n已完成任务数: {}\n", state.completed_quests.len()));
+    }
+
+    output.push_str("\n[返回:look]");
+
+    output
 }
 
 /// Command request

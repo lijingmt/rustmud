@@ -7,11 +7,19 @@ mod gamenv;
 
 use rustenv::rustenv::RustenvServer;
 use gamenv::http_api;
+use gamenv::quest::QUESTD;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 启动 rustenv 服务器
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async {
+        // 初始化任务系统
+        let root_dir = std::env::var("ROOT").unwrap_or_else(|_| "/usr/local/games/rust".to_string());
+        let data_dir = format!("{}/data", root_dir);
+        if let Err(e) = QUESTD.initialize(&data_dir).await {
+            eprintln!("Failed to initialize quest system: {:?}", e);
+        }
+
         // 启动 HTTP API 服务器
         let http_handle = tokio::spawn(async {
             let router = http_api::create_router();

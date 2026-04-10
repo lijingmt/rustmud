@@ -19,9 +19,11 @@ pub mod dialog_system;
 pub mod shop_system;
 pub mod quest;
 pub mod guild;
+pub mod school;
 pub mod world;
 pub mod player_state;
 pub mod single;
+pub mod hidden_cmd;
 
 pub use master::*;
 pub use user::*;

@@ -2,7 +2,7 @@
 //
 // 运行: cargo run --example test_rhai
 
-use rustmud::script::{ScriptEngine, EquipStats};
+use rustmud::script::{EquipStats, ScriptEngine};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化日志
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             send_msg(1001, "欢迎来到 RustMUD!");
             let hp = query_hp(1001);
             debug("玩家 HP: " + hp);
-        "#
+        "#,
     )?;
     println!();
 

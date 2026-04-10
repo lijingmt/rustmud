@@ -1,10 +1,7 @@
 // examples/test_equip.rs - 装备系统测试
 // 运行: cargo run --example test_equip
 
-use rustmud::equip::{
-    ForgeSystem, EquipDesign, EquipType, EquipQuality, Effect,
-    FORGE_SYSTEM,
-};
+use rustmud::equip::{Effect, EquipDesign, EquipQuality, EquipType, ForgeSystem, FORGE_SYSTEM};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -118,16 +115,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let design = EquipDesign {
         template_id: "weapon_sword".to_string(),
-        custom_name: None,  // 使用默认名称
+        custom_name: None, // 使用默认名称
         materials: vec!["iron".to_string()],
         effects: vec![],
-        quality: None,  // 自动计算品质
+        quality: None, // 自动计算品质
     };
 
     let equip = forge.forge(&design, "player_001")?;
     println!("  打造成功！");
-    println!("  {} - 攻击: {}, 防御: {}, 品质: {}\n",
-        equip.name, equip.attack, equip.defense, equip.quality.zh_name());
+    println!(
+        "  {} - 攻击: {}, 防御: {}, 品质: {}\n",
+        equip.name,
+        equip.attack,
+        equip.defense,
+        equip.quality.zh_name()
+    );
 
     // ========================================
     // 4. 打造精良武器（带自定义名称）
@@ -231,11 +233,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ========================================
     println!("【9】可用的装备模板:");
     for template in forge.list_templates() {
-        println!("  - {} ({}): 攻击{}, 防御{}",
-            template.id,
-            template.name,
-            template.base_attack,
-            template.base_defense
+        println!(
+            "  - {} ({}): 攻击{}, 防御{}",
+            template.id, template.name, template.base_attack, template.base_defense
         );
     }
 

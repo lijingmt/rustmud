@@ -2,8 +2,8 @@
 // 运行: cargo run --example test_equip_full
 
 use rustmud::equip::{
-    EquipSystem, Equipment, EquipSlot, EquipQuality, EquipRealm,
-    EquipStats, EquipEffect, EQUIP_SYSTEM,
+    EquipEffect, EquipQuality, EquipRealm, EquipSlot, EquipStats, EquipSystem, Equipment,
+    EQUIP_SYSTEM,
 };
 
 #[tokio::main]
@@ -45,7 +45,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("【2】可用装备模板:");
     for template in system.list_templates() {
         let stats = template.calc_stats();
-        println!("  [{}] {} {} - 攻击:{} 防御:{}",
+        println!(
+            "  [{}] {} {} - 攻击:{} 防御:{}",
             template.id,
             template.quality.color_code(),
             template.name,
@@ -68,7 +69,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         EquipQuality::Legendary,
         EquipQuality::Mythic,
     ] {
-        println!("  {} {}: {}倍属性",
+        println!(
+            "  {} {}: {}倍属性",
             quality.color_code(),
             quality.zh_name(),
             quality.multiplier()
@@ -83,7 +85,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let test_levels = [5, 15, 35, 70, 120, 180, 250, 400, 700, 1500];
     for level in test_levels {
         let realm = EquipRealm::from_level(level);
-        println!("  等级 {} -> {} {}",
+        println!(
+            "  等级 {} -> {} {}",
             level,
             realm.color_code(),
             realm.zh_name()
@@ -117,7 +120,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for _ in 0..10 {
         equip.reinforce().unwrap();
     }
-    println!("  强化到 +10: 攻击={} (预期{} * 2.0 = {})",
+    println!(
+        "  强化到 +10: 攻击={} (预期{} * 2.0 = {})",
         equip.final_stats().attack,
         equip.base_stats.attack,
         equip.base_stats.attack as f64 * 2.0
@@ -135,12 +139,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let template = system.get_template("weapon_dragon_slayer").unwrap();
         let mut e = Equipment::from_template(template, "player_001");
         // 强化到 +5
-        for _ in 0..5 { e.reinforce().unwrap(); }
+        for _ in 0..5 {
+            e.reinforce().unwrap();
+        }
         e
     };
 
     println!("  装备: {}", legend_equip.display_name());
-    println!("  属性: 攻击={} 暴击={}%",
+    println!(
+        "  属性: 攻击={} 暴击={}%",
         legend_equip.final_stats().attack,
         legend_equip.final_stats().crit_rate
     );
@@ -164,11 +171,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("  可用配方:");
     for recipe in system.list_recipes() {
-        println!("    [{}] {} - 成功率:{}% 等级要求:{}",
-            recipe.id,
-            recipe.name,
-            recipe.success_rate,
-            recipe.level_req
+        println!(
+            "    [{}] {} - 成功率:{}% 等级要求:{}",
+            recipe.id, recipe.name, recipe.success_rate, recipe.level_req
         );
     }
     println!();
