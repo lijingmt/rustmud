@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde::{Deserialize, Serialize};
+use crate::gamenv::combat::skill::{Skill, SkillEffect, SkillTarget, SKILLD};
 
 /// PK模式
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -186,6 +187,113 @@ pub struct CombatRound {
     pub log: Vec<String>,
     pub ended: bool,
     pub winner: Option<String>,
+    pub skill_used: Option<String>,  // 使用的技能
+    pub skill_effect: Option<String>, // 技能效果描述
+}
+
+/// 战斗中的技能状态
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BattleSkillState {
+    /// 技能ID
+    pub skill_id: String,
+    /// 当前冷却回合
+    pub current_cooldown: u32,
+    /// 原始冷却回合
+    pub base_cooldown: u32,
+}
+
+impl BattleSkillState {
+    pub fn new(skill_id: String, base_cooldown: u32) -> Self {
+        Self {
+            skill_id,
+            current_cooldown: 0,
+            base_cooldown,
+        }
+    }
+
+    /// 检查是否可用
+    pub fn is_ready(&self) -> bool {
+        self.current_cooldown == 0
+    }
+
+    /// 使用技能后设置冷却
+    pub fn use_skill(&mut self) {
+        self.current_cooldown = self.base_cooldown;
+    }
+
+    /// 每回合减少冷却
+    pub fn tick_cooldown(&mut self) {
+        if self.current_cooldown > 0 {
+            self.current_cooldown -= 1;
+        }
+    }
+}
+
+/// 战斗者的技能列表
+#[derive(Clone, Debug)]
+pub struct FighterSkills {
+    /// 技能状态映射 (skill_id -> state)
+    pub skills: HashMap<String, BattleSkillState>,
+    /// 本回合使用的技能
+    pub this_round_skill: Option<String>,
+}
+
+impl FighterSkills {
+    pub fn new() -> Self {
+        Self {
+            skills: HashMap::new(),
+            this_round_skill: None,
+        }
+    }
+
+    /// 添加技能
+    pub fn add_skill(&mut self, skill_id: String, cooldown: u32) {
+        self.skills.insert(skill_id.clone(), BattleSkillState::new(skill_id, cooldown));
+    }
+
+    /// 检查技能是否可用
+    pub fn can_use_skill(&self, skill_id: &str) -> bool {
+        if let Some(state) = self.skills.get(skill_id) {
+            state.is_ready()
+        } else {
+            false
+        }
+    }
+
+    /// 使用技能
+    pub fn use_skill(&mut self, skill_id: &str) -> bool {
+        if let Some(state) = self.skills.get_mut(skill_id) {
+            if state.is_ready() {
+                state.use_skill();
+                self.this_round_skill = Some(skill_id.to_string());
+                return true;
+            }
+        }
+        false
+    }
+
+    /// 回合结束，减少冷却
+    pub fn tick_all_cooldowns(&mut self) {
+        for state in self.skills.values_mut() {
+            state.tick_cooldown();
+        }
+        self.this_round_skill = None;
+    }
+
+    /// 获取可用技能列表
+    pub fn get_available_skills(&self) -> Vec<String> {
+        self.skills.iter()
+            .filter(|(_, s)| s.is_ready())
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// 获取所有技能信息（用于UI显示）
+    pub fn get_skills_info(&self) -> Vec<(String, u32, u32)> {
+        self.skills.iter()
+            .map(|(id, s)| (id.clone(), s.current_cooldown, s.base_cooldown))
+            .collect()
+    }
 }
 
 /// PK战斗会话
@@ -200,6 +308,12 @@ pub struct PkBattle {
     pub start_time: i64,
     pub status: CombatStatus,
     pub combat_log: Vec<String>,
+    /// 挑战者技能状态
+    pub challenger_skills: FighterSkills,
+    /// 防守者技能状态
+    pub defender_skills: FighterSkills,
+    /// 玩家选择的技能 (player_id -> skill_id)
+    pub pending_skills: HashMap<String, String>,
 }
 
 impl PkBattle {
@@ -209,6 +323,18 @@ impl PkBattle {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+
+        // 初始化技能列表 - 每个玩家默认有基础攻击技能
+        let mut challenger_skills = FighterSkills::new();
+        let mut defender_skills = FighterSkills::new();
+
+        // 为双方添加基础技能
+        challenger_skills.add_skill("skill_basic_attack".to_string(), 0);
+        defender_skills.add_skill("skill_basic_attack".to_string(), 0);
+
+        // 根据等级添加更多技能
+        Self::add_skills_for_level(&mut challenger_skills, challenger.level as u32);
+        Self::add_skills_for_level(&mut defender_skills, defender.level as u32);
 
         Self {
             battle_id,
@@ -220,7 +346,164 @@ impl PkBattle {
             start_time,
             status: CombatStatus::Fighting,
             combat_log: vec![],
+            challenger_skills,
+            defender_skills,
+            pending_skills: HashMap::new(),
         }
+    }
+
+    /// 根据等级添加技能
+    fn add_skills_for_level(skills: &mut FighterSkills, level: u32) {
+        // Lv.1+: 强力一击 (让新手也能用)
+        skills.add_skill("skill_power_strike".to_string(), 3);
+
+        // Lv.2+: 快速连击
+        if level >= 2 {
+            skills.add_skill("skill_quick_strike".to_string(), 2);
+        }
+        // Lv.5+: 防御姿态
+        if level >= 5 {
+            skills.add_skill("skill_defense".to_string(), 4);
+        }
+        // Lv.10+: 治疗术
+        if level >= 10 {
+            skills.add_skill("skill_heal".to_string(), 5);
+        }
+        // Lv.15+: 旋风斩
+        if level >= 15 {
+            skills.add_skill("skill_whirlwind".to_string(), 4);
+        }
+        // Lv.20+: 致命一击
+        if level >= 20 {
+            skills.add_skill("skill_critical_strike".to_string(), 5);
+        }
+    }
+
+    /// 获取指定玩家的技能状态
+    pub fn get_player_skills(&self, player_id: &str) -> Option<&FighterSkills> {
+        if player_id == self.challenger.id {
+            Some(&self.challenger_skills)
+        } else if player_id == self.defender.id {
+            Some(&self.defender_skills)
+        } else {
+            None
+        }
+    }
+
+    /// 获取指定玩家的可变技能状态
+    pub fn get_player_skills_mut(&mut self, player_id: &str) -> Option<&mut FighterSkills> {
+        if player_id == self.challenger.id {
+            Some(&mut self.challenger_skills)
+        } else if player_id == self.defender.id {
+            Some(&mut self.defender_skills)
+        } else {
+            None
+        }
+    }
+
+    /// 玩家选择技能
+    pub fn select_skill(&mut self, player_id: &str, skill_id: &str) -> Result<(), String> {
+        // 检查玩家是否在战斗中
+        let skills = self.get_player_skills(player_id)
+            .ok_or("你不是战斗参与者！")?;
+
+        // 检查技能是否可用
+        if !skills.can_use_skill(skill_id) {
+            return Err("技能不可用或正在冷却中！".to_string());
+        }
+
+        // 检查内力是否足够
+        let skill = SKILLD.lock().ok().and_then(|s| s.get_skill(skill_id).cloned());
+        if let Some(skill) = skill {
+            let player_qi = if player_id == self.challenger.id {
+                self.challenger.qi
+            } else {
+                self.defender.qi
+            };
+            if player_qi < skill.qi_cost as i32 {
+                return Err(format!("内力不足！需要 {}", skill.qi_cost));
+            }
+        }
+
+        self.pending_skills.insert(player_id.to_string(), skill_id.to_string());
+        Ok(())
+    }
+
+    /// 使用技能计算伤害（不修改defender，返回伤害值）
+    fn calculate_skill_damage(
+        &self,
+        attacker: &CombatStats,
+        defender: &CombatStats,
+        skill_id: &str,
+        attacker_id: &str,
+    ) -> (i32, String) {
+        let skill_mgr = match SKILLD.lock() {
+            Ok(guard) => guard,
+            Err(_) => return (self.calculate_damage(attacker, defender), "普通攻击".to_string()),
+        };
+
+        let skill = match skill_mgr.get_skill(skill_id) {
+            Some(s) => s,
+            None => return (self.calculate_damage(attacker, defender), "普通攻击".to_string()),
+        };
+
+        // 获取玩家技能等级（如果有）
+        let skill_level = self.get_player_skill_level(attacker_id, skill_id);
+        // 简化的技能等级加成: 每级增加5%伤害
+        let skill_bonus = skill_level as f32 * 0.05;
+
+        let mut total_damage = 0;
+        let mut effect_desc = format!("§Y使用{}§N", skill.name_cn);
+        if skill_level > 0 {
+            effect_desc.push_str(&format!("(Lv.{})", skill_level));
+        }
+
+        // 应用技能效果
+        for effect in &skill.effects {
+            match effect {
+                SkillEffect::Damage(multiplier) => {
+                    // 基础伤害 + 技能等级加成
+                    let base_damage = ((attacker.attack as f32 * multiplier * (1.0 + skill_bonus)) as i32 - defender.defense / 2).max(1);
+                    total_damage += base_damage;
+                    effect_desc.push_str(&format!(" 造成§R{}§N点伤害", base_damage));
+                }
+                SkillEffect::FixedDamage(dmg) => {
+                    let damage = ((*dmg as f32 * (1.0 + skill_bonus)) as i32 - defender.defense / 2).max(1);
+                    total_damage += damage;
+                    effect_desc.push_str(&format!(" 造成§R{}§N点伤害", damage));
+                }
+                SkillEffect::HealPercent(percent) => {
+                    // 治疗效果不在此处处理，需要在回合开始时
+                }
+                SkillEffect::HealFixed(amount) => {
+                    // 治疗效果不在此处处理
+                }
+                _ => {}
+            }
+        }
+
+        // 应用闪避和暴击
+        let dodge_chance = defender.dodge as f64 / (attacker.dodge + defender.dodge) as f64;
+        if rand::random::<f64>() < dodge_chance && total_damage > 0 {
+            return (0, format!("§Y使用{}§N 被§R闪避§N", skill.name_cn));
+        }
+
+        // 暴击检查 (技能等级越高，暴击率越高)
+        let crit_chance = 0.1 + (skill_level as f64 * 0.01);
+        let is_crit = rand::random::<f64>() < crit_chance.min(0.5);
+        if is_crit && total_damage > 0 {
+            total_damage = (total_damage as f64 * 1.5) as i32;
+            effect_desc.push_str(" §c暴击!§N");
+        }
+
+        (total_damage, effect_desc)
+    }
+
+    /// 获取玩家技能等级（简化版，暂时返回固定值）
+    fn get_player_skill_level(&self, player_id: &str, skill_id: &str) -> u32 {
+        // TODO: 实现从PlayerState获取玩家技能等级
+        // 目前返回固定值，等PlayerStateManager API完善后再实现
+        10
     }
 
     /// 计算伤害
@@ -261,52 +544,89 @@ impl PkBattle {
         let mut attacker_damage = 0;
         let mut defender_damage = 0;
         let mut log = vec![];
+        let mut skill_used = None;
+        let mut skill_effect = None;
 
-        // 挑战者攻击
+        // 获取挑战者选择的技能（如果有）
+        let challenger_skill_id = self.pending_skills.remove(&self.challenger.id)
+            .unwrap_or_else(|| "skill_basic_attack".to_string());
+
+        // 获取防守者选择的技能（如果有）
+        let defender_skill_id = self.pending_skills.remove(&self.defender.id)
+            .unwrap_or_else(|| "skill_basic_attack".to_string());
+
+        // 检查并消耗内力
+        let challenger_skill = SKILLD.lock().ok().and_then(|s| s.get_skill(&challenger_skill_id).cloned());
+        if let Some(skill) = challenger_skill {
+            if self.challenger.qi >= skill.qi_cost as i32 {
+                self.challenger.qi -= skill.qi_cost as i32;
+            }
+        }
+        let defender_skill = SKILLD.lock().ok().and_then(|s| s.get_skill(&defender_skill_id).cloned());
+        if let Some(skill) = defender_skill {
+            if self.defender.qi >= skill.qi_cost as i32 {
+                self.defender.qi -= skill.qi_cost as i32;
+            }
+        }
+
+        // 挑战者攻击（使用技能）
         if self.challenger.is_alive() {
-            attacker_damage = self.calculate_damage(&self.challenger, &self.defender);
+            let (damage, effect_desc) = self.calculate_skill_damage(
+                &self.challenger,
+                &self.defender,
+                &challenger_skill_id,
+                &self.challenger.id,
+            );
+            attacker_damage = damage;
 
-            if attacker_damage > 0 {
-                log.push(format!(
-                    "§Y{}§N对§R{}§N造成§R{}§N点伤害！",
-                    self.challenger.name_cn,
-                    self.defender.name_cn,
-                    attacker_damage
-                ));
-            } else {
-                log.push(format!(
-                    "§Y{}§N的攻击被§R{}§N闪避了！",
-                    self.challenger.name_cn,
-                    self.defender.name_cn
-                ));
+            if challenger_skill_id != "skill_basic_attack" {
+                skill_used = Some(challenger_skill_id.clone());
+                skill_effect = Some(effect_desc.clone());
             }
 
-            self.defender.hp = (self.defender.hp - attacker_damage).max(0);
-            self.total_damage_dealt += attacker_damage;
+            log.push(format!(
+                "§Y{}§N{}",
+                self.challenger.name_cn,
+                effect_desc
+            ));
+
+            if attacker_damage > 0 {
+                self.defender.hp = (self.defender.hp - attacker_damage).max(0);
+                self.total_damage_dealt += attacker_damage;
+            }
+
+            // 标记技能已使用
+            self.challenger_skills.use_skill(&challenger_skill_id);
         }
 
         // 防守者反击（如果还活着）
         if self.defender.is_alive() && self.defender.hp > 0 {
-            defender_damage = self.calculate_damage(&self.defender, &self.challenger);
+            let (damage, effect_desc) = self.calculate_skill_damage(
+                &self.defender,
+                &self.challenger,
+                &defender_skill_id,
+                &self.defender.id,
+            );
+            defender_damage = damage;
+
+            log.push(format!(
+                "§R{}§N{}",
+                self.defender.name_cn,
+                effect_desc
+            ));
 
             if defender_damage > 0 {
-                log.push(format!(
-                    "§R{}§N对§Y{}§N造成§R{}§N点伤害！",
-                    self.defender.name_cn,
-                    self.challenger.name_cn,
-                    defender_damage
-                ));
-            } else {
-                log.push(format!(
-                    "§R{}§N的攻击被§Y{}§N闪避了！",
-                    self.defender.name_cn,
-                    self.challenger.name_cn
-                ));
+                self.challenger.hp = (self.challenger.hp - defender_damage).max(0);
+                self.total_damage_taken += defender_damage;
             }
 
-            self.challenger.hp = (self.challenger.hp - defender_damage).max(0);
-            self.total_damage_taken += defender_damage;
+            // 标记技能已使用
+            self.defender_skills.use_skill(&defender_skill_id);
         }
+
+        // 减少所有技能的冷却
+        self.challenger_skills.tick_all_cooldowns();
+        self.defender_skills.tick_all_cooldowns();
 
         // 检查战斗是否结束
         let ended = !self.challenger.is_alive() || !self.defender.is_alive();
@@ -337,6 +657,8 @@ impl PkBattle {
             log,
             ended,
             winner,
+            skill_used,
+            skill_effect,
         }
     }
 
@@ -396,6 +718,8 @@ impl PkBattle {
             self.challenger.name_cn, self.challenger.level));
         output.push_str(&format!("§Y生命: {}{}/{}{}\n",
             challenger_hp_color, self.challenger.hp, self.challenger.hp_max, challenger_hp_end));
+        output.push_str(&format!("§Y内力: {}/{}\n",
+            self.challenger.qi, self.challenger.qi_max));
 
         // 防守者状态 - 使用颜色代码
         let (defender_hp_color, defender_hp_end) = if self.defender.hp_percent() > 50 {
@@ -410,9 +734,163 @@ impl PkBattle {
             self.defender.name_cn, self.defender.level));
         output.push_str(&format!("§R生命: {}{}/{}{}\n",
             defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end));
+        output.push_str(&format!("§R内力: {}/{}\n",
+            self.defender.qi, self.defender.qi_max));
 
         // 标题放在最下面
         output.push_str(&format!("\n§C========== PK战斗进行中 =========§N"));
+
+        output
+    }
+
+    /// 为指定玩家生成战斗状态（包含技能列表）
+    pub fn generate_status_for_player(&self, player_id: &str) -> String {
+        let mut output = String::new();
+
+        let skills = match self.get_player_skills(player_id) {
+            Some(s) => s,
+            None => return "你不在战斗中！".to_string(),
+        };
+
+        // 操作按钮 - 放在最上面方便操作
+        output.push_str(&format!("§H【操作】§N\n"));
+
+        // 技能列表按钮 - 移除按钮内的颜色代码，避免解析问题
+        output.push_str("[查看技能:skills]\n");
+        output.push_str("[继续战斗:pk continue]\n");
+        output.push_str("[逃跑:escape]\n");
+        output.push_str("[投降:surrender]\n");
+        output.push_str("\n");
+
+        // 显示已选择的技能（如果有）
+        if let Some(ref pending_skill_id) = self.pending_skills.get(player_id) {
+            if let Some(skill) = SKILLD.lock().ok().and_then(|s| s.get_skill(pending_skill_id).cloned()) {
+                output.push_str(&format!("§Y已选择技能: {}§N\n\n", skill.name_cn));
+            }
+        } else {
+            output.push_str("§c未选择技能（使用普通攻击）§N\n\n");
+        }
+
+        output.push_str(&format!("§Y回合: {}§N\n\n", self.round));
+
+        // 挑战者状态
+        let (challenger_hp_color, challenger_hp_end) = if self.challenger.hp_percent() > 50 {
+            ("§G", "§N")
+        } else if self.challenger.hp_percent() > 20 {
+            ("§Y", "§N")
+        } else {
+            ("§R", "§N")
+        };
+
+        output.push_str(&format!("§Y【挑战者】§N {} (Lv.{})\n",
+            self.challenger.name_cn, self.challenger.level));
+        output.push_str(&format!("§Y生命: {}{}/{}{} 内力: {}/{}\n",
+            challenger_hp_color, self.challenger.hp, self.challenger.hp_max, challenger_hp_end,
+            self.challenger.qi, self.challenger.qi_max));
+
+        // 防守者状态
+        let (defender_hp_color, defender_hp_end) = if self.defender.hp_percent() > 50 {
+            ("§G", "§N")
+        } else if self.defender.hp_percent() > 20 {
+            ("§Y", "§N")
+        } else {
+            ("§R", "§N")
+        };
+
+        output.push_str(&format!("\n§R【防守者】§N {} (Lv.{})\n",
+            self.defender.name_cn, self.defender.level));
+        output.push_str(&format!("§R生命: {}{}/{}{} 内力: {}/{}\n",
+            defender_hp_color, self.defender.hp, self.defender.hp_max, defender_hp_end,
+            self.defender.qi, self.defender.qi_max));
+
+        // 显示冷却中的技能
+        let all_skills = skills.get_skills_info();
+        let cooling_skills: Vec<_> = all_skills.iter()
+            .filter(|(_, cd, _)| *cd > 0)
+            .collect();
+
+        if !cooling_skills.is_empty() {
+            output.push_str(&format!("\n§c【冷却中】§N\n"));
+            for (skill_id, cd, _) in cooling_skills {
+                // Clone the skill to avoid lifetime issues
+                let skill = SKILLD.lock().ok().and_then(|s| s.get_skill(skill_id).cloned());
+                if let Some(skill) = skill {
+                    output.push_str(&format!("{} (冷却:{}回合)\n", skill.name_cn, cd));
+                }
+            }
+        }
+
+        output.push_str(&format!("\n§C========== PK战斗进行中 =========§N"));
+
+        output
+    }
+
+    /// 生成技能列表（供 skills 命令使用）
+    pub fn generate_skills_list(&self, player_id: &str) -> String {
+        let mut output = String::new();
+
+        let skills = match self.get_player_skills(player_id) {
+            Some(s) => s,
+            None => return "你不在战斗中！\n[返回:look]".to_string(),
+        };
+
+        let player_qi = if player_id == self.challenger.id {
+            self.challenger.qi
+        } else {
+            self.defender.qi
+        };
+
+        output.push_str("§H【战斗技能】§N\n\n");
+
+        // 获取所有技能信息
+        let all_skills_info = skills.get_skills_info();
+
+        if all_skills_info.is_empty() {
+            output.push_str("§c没有可用技能§N\n");
+        } else {
+            for (skill_id, current_cd, _base_cd) in &all_skills_info {
+                // 跳过基础攻击（它是默认技能）
+                if skill_id == "skill_basic_attack" {
+                    continue;
+                }
+
+                // 从 SKILLD 获取技能信息
+                let skill = SKILLD.lock().ok().and_then(|s| s.get_skill(skill_id).cloned());
+
+                if let Some(skill) = skill {
+                    let can_afford = player_qi >= skill.qi_cost as i32;
+                    let is_ready = *current_cd == 0;
+
+                    // 构建技能选项
+                    let status = if !is_ready {
+                        format!("§c(冷却:{})§N", current_cd)
+                    } else if !can_afford {
+                        format!("§c(内力不足-需{})§N", skill.qi_cost)
+                    } else {
+                        String::new()
+                    };
+
+                    // 显示技能按钮 - 使用英文名（便于维护）
+                    if is_ready && can_afford {
+                        output.push_str(&format!(
+                            "[{}:cast {}]\n",
+                            skill_id, skill_id
+                        ));
+                    } else {
+                        output.push_str(&format!(
+                            "§c{} {}§N\n",
+                            skill.name_cn, status.trim()
+                        ));
+                    }
+                }
+            }
+        }
+
+        // 默认技能提示 - 移除颜色代码避免解析问题
+        output.push_str("\n§H默认技能§N\n基础攻击 (无消耗)\n");
+
+        // 返回按钮
+        output.push_str("[返回:look]\n");
 
         output
     }
@@ -438,15 +916,19 @@ impl PkDaemon {
         // 检查是否可以发起攻击
         challenger.can_attack(&defender)?;
 
-        // 检查是否已经在战斗中
-        let battles = self.battles.read().await;
-        if battles.contains_key(&challenger.id) {
+        // 检查是否已经在战斗中（使用player_battles映射）
+        let player_battles = self.player_battles.read().await;
+        if player_battles.contains_key(&challenger.id) {
+            println!("[PKD] Challenge FAILED: {} is already in battle", challenger.id);
             return Err("你正在战斗中！".to_string());
         }
-        if battles.contains_key(&defender.id) {
+        if player_battles.contains_key(&defender.id) {
+            println!("[PKD] Challenge FAILED: {} is already in battle", defender.id);
             return Err("对方正在战斗中！".to_string());
         }
-        drop(battles);
+        drop(player_battles);
+
+        println!("[PKD] Challenge: {} vs {}", challenger.id, defender.id);
 
         // 创建战斗
         let challenger_id = challenger.id.clone();
@@ -500,15 +982,19 @@ impl PkDaemon {
 
     /// 结束战斗
     pub async fn end_battle(&self, battle_id: &str) -> Option<PkBattle> {
+        println!("[PKD] end_battle called for {}", battle_id);
         let mut battles = self.battles.write().await;
         let mut player_battles = self.player_battles.write().await;
 
         if let Some(battle) = battles.remove(battle_id) {
             // 清理玩家映射
+            println!("[PKD] Removing player mappings: {} and {}", battle.challenger.id, battle.defender.id);
             player_battles.remove(&battle.challenger.id);
             player_battles.remove(&battle.defender.id);
+            println!("[PKD] Battle ended, remaining battles: {}", battles.len());
             Some(battle)
         } else {
+            println!("[PKD] Battle {} not found!", battle_id);
             None
         }
     }
@@ -565,6 +1051,44 @@ impl PkDaemon {
             Ok("§Y你投降了！§N".to_string())
         } else {
             Err("只有发起者可以投降！".to_string())
+        }
+    }
+
+    /// 玩家选择技能
+    pub async fn select_skill(&self, player_id: &str, skill_id: &str) -> Result<String, String> {
+        // 先获取 battle_id（只需要读锁）
+        let battle_id = {
+            let player_battles = self.player_battles.read().await;
+            player_battles.get(player_id)
+                .ok_or("你不在战斗中！".to_string())?
+                .clone()
+        };
+
+        // 然后获取 battles 的写锁来修改战斗状态
+        let mut battles = self.battles.write().await;
+        if let Some(battle) = battles.get_mut(&battle_id) {
+            battle.select_skill(player_id, skill_id)?;
+            Ok(format!("§Y你选择了 {}§N\n[继续战斗:pk continue]", skill_id))
+        } else {
+            Err("战斗不存在！".to_string())
+        }
+    }
+
+    /// 获取玩家战斗状态（包含技能）
+    pub async fn get_player_battle_status(&self, player_id: &str) -> Option<String> {
+        if let Some(battle) = self.get_player_battle(player_id).await {
+            Some(battle.generate_status_for_player(player_id))
+        } else {
+            None
+        }
+    }
+
+    /// 获取玩家技能列表
+    pub async fn get_player_skills_list(&self, player_id: &str) -> Option<String> {
+        if let Some(battle) = self.get_player_battle(player_id).await {
+            Some(battle.generate_skills_list(player_id))
+        } else {
+            None
         }
     }
 }

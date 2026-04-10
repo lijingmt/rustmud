@@ -234,6 +234,8 @@ impl MudOutputParser {
                         let label = &bracket_content[..colon_pos];
                         let command = &bracket_content[colon_pos + 1..];
 
+                        println!("[DEBUG] Parsed button: label='{}', command='{}'", label, command);
+
                         // 确定按钮样式
                         let button_class = if command.contains("kill") || command.contains("attack") {
                             "btn-danger"
@@ -305,7 +307,7 @@ impl MudOutputParser {
                 text: Some(prefix.to_string()),
                 parts: Some(vec![TextPart {
                     text: prefix.to_string(),
-                    color: Some("#ffff00".to_string()),
+                    color: Some("#00d8ff".to_string()),  // Cyan instead of yellow
                     bold: None,
                     underline: None,
                     link: None,
@@ -450,7 +452,7 @@ impl MudOutputParser {
     }
 
     /// 生成房间 JSON 输出（用于 Vue 前端）
-    pub fn generate_room_json(&self) -> Vec<MudLine> {
+    pub fn generate_room_json(&self, userid: &str) -> Vec<MudLine> {
         let mut lines = vec![];
 
         if let Some(room) = &self.current_room {
@@ -462,7 +464,7 @@ impl MudOutputParser {
                     text: Some(room.name.clone()),
                     parts: Some(vec![TextPart {
                         text: room.name.clone(),
-                        color: Some("#00ff00".to_string()),
+                        color: Some("#cc3300".to_string()),  // Deep orange-red instead of pink
                         bold: Some(true),
                         underline: None,
                         link: None,
@@ -485,7 +487,7 @@ impl MudOutputParser {
                         text: Some(desc_line.to_string()),
                         parts: Some(vec![TextPart {
                             text: desc_line.to_string(),
-                            color: Some("#cccccc".to_string()),
+                            color: Some("#556b2f".to_string()),  // Dark olive green instead of light purple
                             bold: None,
                             underline: None,
                             link: None,
@@ -495,28 +497,8 @@ impl MudOutputParser {
                 });
             }
 
-            // 出口
-            if !self.room_exits_with_names.is_empty() {
-                lines.push(MudLine {
-                    r#type: "empty".to_string(),
-                    segments: vec![],
-                });
-
-                // 可点击的出口按钮（带方向箭头和目标房间名）
-                for exit_info in &self.room_exits_with_names {
-                    lines.push(MudLine {
-                        r#type: "line".to_string(),
-                        segments: vec![MudSegment {
-                            r#type: SegmentType::Button,
-                            label: Some(format!("{}{}：{}", exit_info.direction_cn, exit_info.arrow, exit_info.target_room)),
-                            cmd: Some(format!("go {}", exit_info.direction)),
-                            class: Some("exit-btn".to_string()),
-                            ..Default::default()
-                        }],
-                    });
-                }
-            } else if !self.room_exits.is_empty() {
-                // 回退到简单显示（如果没有exits_with_names）
+            // 出口 - 添加可点击的出口按钮
+            if !self.room_exits_with_names.is_empty() || !self.room_exits.is_empty() {
                 lines.push(MudLine {
                     r#type: "empty".to_string(),
                     segments: vec![],
@@ -533,7 +515,7 @@ impl MudOutputParser {
                         text: Some(exit_text.clone()),
                         parts: Some(vec![TextPart {
                             text: exit_text,
-                            color: Some("#ffff00".to_string()),
+                            color: Some("#00d8ff".to_string()),  // Cyan instead of yellow
                             bold: None,
                             underline: None,
                             link: None,
@@ -542,23 +524,25 @@ impl MudOutputParser {
                     }],
                 });
 
-                // 可点击的出口按钮
-                let mut exit_segments = vec![];
-                for exit in &self.room_exits {
-                    let direction_cn = self.direction_to_chinese(exit);
-                    let arrow = self.direction_arrow(exit);
-                    exit_segments.push(MudSegment {
-                        r#type: SegmentType::Button,
-                        label: Some(format!("{}{}", direction_cn, arrow)),
-                        cmd: Some(format!("go {}", exit)),
-                        class: Some("exit-btn".to_string()),
-                        ..Default::default()
+                // 可点击的出口按钮 - 包含目标房间名称（每个方向独占一行）
+                for exit_info in &self.room_exits_with_names {
+                    let direction_cn = exit_info.direction_cn.clone();
+                    let arrow = exit_info.arrow.clone();
+                    let target_room = exit_info.target_room.clone();
+                    // 格式: "北↑：北郊"
+                    let label = format!("{}{}：{}", direction_cn, arrow, target_room);
+
+                    lines.push(MudLine {
+                        r#type: "line".to_string(),
+                        segments: vec![MudSegment {
+                            r#type: SegmentType::Button,
+                            label: Some(label),
+                            cmd: Some(format!("go {}", exit_info.direction)),
+                            class: Some("exit-btn".to_string()),
+                            ..Default::default()
+                        }],
                     });
                 }
-                lines.push(MudLine {
-                    r#type: "line".to_string(),
-                    segments: exit_segments,
-                });
             }
 
             // NPC

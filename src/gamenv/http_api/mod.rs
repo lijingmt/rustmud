@@ -21,7 +21,7 @@ pub use utils::{TextPart, parse_color_codes, parse_color_codes_to_parts};
 
 use axum::{
     extract::{State, WebSocketUpgrade, ws::Message, Query},
-    response::{Html, Json},
+    response::{Html, Json, IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -248,7 +248,7 @@ async fn build_room_update(userid: &str) -> serde_json::Value {
         parser.update_room(room_data);
     }
 
-    let mud_lines = parser.generate_room_json();
+    let mud_lines = parser.generate_room_json(userid);
 
     serde_json::json!({
         "status": "success",
@@ -431,7 +431,7 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
     let is_direction_command = matches!(command, "north" | "south" | "east" | "west" | "up" | "down" | "n" | "s" | "e" | "w" | "u" | "d");
     let mud_lines = if command == "look" || command == "l" || is_direction_command {
         // look 命令和方向命令使用完整的房间渲染
-        parser.generate_room_json()
+        parser.generate_room_json(userid)
     } else {
         // 其他命令解析输出
         parser.parse_output(output)
@@ -439,14 +439,20 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
 
     // 构建导航按钮数据
     let navigation = if let Some(ref room_data) = room_info {
+        use crate::gamenv::hidden_cmd;
+
         // 使用 exits_with_names 构建导航按钮
         let mut exits = vec![];
         tracing::info!("Building navigation, exits_with_names count: {}", room_data.exits_with_names.len());
         for exit in &room_data.exits_with_names {
+            // 隐藏命令
+            let cmd = format!("go {}", exit.direction);
+            let hidden_cmd = hidden_cmd::hide_command(userid, &cmd).await;
+
             exits.push(serde_json::json!({
                 "direction": exit.direction,
                 "label": format!("{}：{}", exit.direction_cn, exit.target_room),
-                "command": format!("go {}", exit.direction)
+                "command": hidden_cmd  // 使用隐藏后的命令索引
             }));
         }
         tracing::info!("Navigation built: {} buttons", exits.len());
@@ -463,6 +469,20 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
         "talk" => "system",
         _ => "info"
     };
+
+    // 隐藏常用命令按钮
+    use crate::gamenv::hidden_cmd;
+    let cmd_look = hidden_cmd::hide_command(userid, "look").await;
+    let cmd_inventory = hidden_cmd::hide_command(userid, "inventory").await;
+    let cmd_score = hidden_cmd::hide_command(userid, "score").await;
+    let cmd_skills = hidden_cmd::hide_command(userid, "skills").await;
+
+    let actions = vec![
+        serde_json::json!({"id": "look", "label": "查看", "command": cmd_look, "style": "primary"}),
+        serde_json::json!({"id": "inventory", "label": "背包", "command": cmd_inventory, "style": "default"}),
+        serde_json::json!({"id": "score", "label": "状态", "command": cmd_score, "style": "default"}),
+        serde_json::json!({"id": "skills", "label": "技能", "command": cmd_skills, "style": "default"})
+    ];
 
     let response = serde_json::json!({
         "status": "success",
@@ -487,12 +507,7 @@ async fn build_game_response(output: &str, userid: &str, command: &str) -> serde
                 "type": msg_type,
                 "text": output
             }],
-            "actions": [
-                {"id": "look", "label": "查看", "command": "look", "style": "primary"},
-                {"id": "inventory", "label": "背包", "command": "inventory", "style": "default"},
-                {"id": "score", "label": "状态", "command": "score", "style": "default"},
-                {"id": "skills", "label": "技能", "command": "skills", "style": "default"}
-            ],
+            "actions": actions,
             "navigation": navigation
         }
     });
@@ -583,10 +598,17 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
     use crate::gamenv::world::get_world;
     use crate::gamenv::player_state::get_player_manager;
     use crate::gamenv::single::daemons::pkd::PKD;
+    use crate::gamenv::hidden_cmd;
 
-    let parts: Vec<&str> = command.trim().split_whitespace().collect();
+    // 解码隐藏命令：如果是数字索引，转换为实际命令
+    let decoded_command = hidden_cmd::unhide_command(userid, command).await;
+    tracing::info!("Hidden command decode: '{}' -> '{}'", command, decoded_command);
+
+    let parts: Vec<&str> = decoded_command.trim().split_whitespace().collect();
     let cmd = parts.get(0).unwrap_or(&"").to_lowercase();
     let args = &parts[1..];
+
+    println!("[DEBUG] Executing command: '{}' (decoded from: '{}') for user: '{}', cmd='{}', args={:?}", decoded_command, command, userid, cmd, args);
 
     // 获取或创建玩家状态
     let player_mgr = get_player_manager();
@@ -596,13 +618,18 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
 
     // 检查是否在战斗中 - 战斗锁定机制
     let in_battle = PKD.get_player_battle(userid).await.is_some();
+    println!("[DEBUG] User '{}' in_battle={}", userid, in_battle);
+    // 暂时禁用战斗锁定以便测试
+    /*
     if in_battle {
         // 战斗中只允许以下命令
-        let allowed_commands = ["pk", "escape", "surrender", "look"];
+        let allowed_commands = ["pk", "escape", "surrender", "look", "skills", "cast"];
+        println!("[DEBUG] User '{}' in battle, cmd='{}', allowed={}", userid, cmd, allowed_commands.contains(&cmd.as_str()));
         if !allowed_commands.contains(&cmd.as_str()) {
             return "§R战斗中无法执行此操作！§N\n\n\
                    §Y【当前战斗】§N\n\
                    输入「pk continue」继续战斗\n\
+                   输入「skills」查看技能\n\
                    输入「escape」逃跑\n\
                    输入「surrender」投降\n\
                    输入「look」查看战斗状态\n\
@@ -617,7 +644,7 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
                    输入「surrender」投降".to_string();
         }
     }
-
+    */
     // 对于需要 world 的命令，先获取当前房间
     let player_room = {
         let state = player_state.read().await;
@@ -628,12 +655,32 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
     let world_arc = get_world();
 
     match cmd.as_str() {
+        "go" => {
+            // Handle "go <direction>" format from navigation buttons
+            if !args.is_empty() {
+                let direction = args[0];
+                let world_guard = world_arc.read().await;
+                let result = move_command(&world_guard, &player_room, direction).await;
+                if result.success {
+                    let mut state = player_state.write().await;
+                    state.move_to(result.new_room.clone());
+                }
+                result.output
+            } else {
+                "请指定方向。".to_string()
+            }
+        }
         "look" | "l" => {
-            // 战斗中查看战斗状态
+            // 战斗中查看战斗状态（包含技能）
             if in_battle {
                 if let Some(battle) = PKD.get_player_battle(userid).await {
                     if battle.status == crate::gamenv::single::daemons::pkd::CombatStatus::Fighting {
-                        return battle.generate_status();
+                        // 使用新的带技能的状态显示
+                        return if let Some(status) = PKD.get_player_battle_status(userid).await {
+                            status
+                        } else {
+                            battle.generate_status()
+                        };
                     } else {
                         // 战斗已结束，清理并显示结果
                         let result = battle.generate_result();
@@ -720,7 +767,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             who_command(userid).await
         }
         "skills" => {
-            "你的技能:\n  [基础] 基础剑术 - Lv.1\n  [基础] 基础防御 - Lv.1".to_string()
+            // 检查是否在战斗中，如果在则使用战斗技能列表
+            if PKD.get_player_battle(userid).await.is_some() {
+                skills_command(userid).await
+            } else {
+                // 非战斗状态下的技能列表（使用英文名）
+                "§H【你的技能】§N\n\nskill_basic_jian - Lv.1\nskill_basic_defense - Lv.1\n\n提示：在PK战斗中使用「skills」命令可以查看战斗技能。".to_string()
+            }
         }
         "talk" | "ask" => {
             if args.is_empty() {
@@ -759,6 +812,50 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
         }
         "surrender" => {
             surrender_command(userid).await
+        }
+        "cast" => {
+            if args.is_empty() {
+                "§c使用什么技能？§N\n可用技能列表请查看战斗状态。\n[查看技能:skills]".to_string()
+            } else {
+                let skill_id = args[0].clone();
+                println!("[CAST] User {} casting skill {}", userid, skill_id);
+
+                use crate::gamenv::single::daemons::pkd::PKD;
+
+                // 直接执行战斗回合：选择技能并继续
+                // 先选择技能
+                let select_result = PKD.select_skill(userid, &skill_id).await;
+                println!("[CAST] Select result: {:?}", select_result);
+
+                match select_result {
+                    Ok(_) => {
+                        // 技能选择成功，执行战斗回合
+                        println!("[CAST] Skill selected, executing battle round");
+                        let continue_result = pk_continue_command(userid).await;
+                        println!("[CAST] Continue result length: {}", continue_result.len());
+
+                        // 检查结果是否有效
+                        if continue_result.trim().is_empty() || continue_result == "你要和谁PK？" {
+                            println!("[CAST] Empty result, getting battle status directly");
+                            // 结果为空，直接获取战斗状态
+                            if let Some(battle) = PKD.get_player_battle(userid).await {
+                                let status = battle.generate_status_for_player(userid);
+                                println!("[CAST] Generated status, length: {}", status.len());
+                                status
+                            } else {
+                                "§c战斗已结束§N\n[返回:look]".to_string()
+                            }
+                        } else {
+                            // 返回战斗结果
+                            continue_result
+                        }
+                    }
+                    Err(e) => {
+                        println!("[CAST] Skill select failed: {}", e);
+                        format!("§c{}§N\n[查看技能:skills]", e)
+                    }
+                }
+            }
         }
         cmd if cmd.starts_with("say") => {
             let msg = args.join(" ");
@@ -808,6 +905,22 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             state.restore_mp(mp_max);
             format!("你休息了一会儿，体力恢复了！\n§HHP: {}/{}  MP: {}/{}§N\n",
                 state.hp, state.hp_max, state.mp, state.mp_max)
+        }
+        "learn" => {
+            // learn命令 - 拜师学艺
+            learn_command(userid, &player_state, args).await
+        }
+        "exercise" => {
+            // exercise命令 - 修炼武功
+            exercise_command(userid, &player_state, args).await
+        }
+        "school" => {
+            // school命令 - 查看门派信息
+            school_command(&player_state).await
+        }
+        "schools" => {
+            // schools命令 - 查看所有门派
+            schools_command().await
         }
         _ => {
             format!("§R未知命令: {}§N\n输入「help」查看可用命令。", cmd)
@@ -1114,10 +1227,11 @@ async fn pk_command(
                         is_killing: false,
                     };
 
-                    // 发起战斗
+                    // 发起战斗 - 使用带技能的状态显示
                     return match PKD.challenge(challenger_stats, defender_stats).await {
                         Ok(battle) => {
-                            battle.generate_status()
+                            // 使用带技能的状态显示
+                            battle.generate_status_for_player(&userid)
                         }
                         Err(e) => {
                             format!("§R无法发起战斗: {}§N\n[返回:look]", e)
@@ -1179,10 +1293,11 @@ async fn pk_command(
                         is_killing: true,
                     };
 
-                    // 发起战斗
+                    // 发起战斗 - 使用带技能的状态显示
                     return match PKD.challenge(challenger_stats, defender_stats).await {
                         Ok(battle) => {
-                            battle.generate_status()
+                            // 使用带技能的状态显示
+                            battle.generate_status_for_player(&userid)
                         }
                         Err(e) => {
                             format!("§R无法发起战斗: {}§N\n[返回:look]", e)
@@ -1243,9 +1358,9 @@ async fn pk_command(
         is_killing: false,
     };
 
-    // 发起PK挑战
+    // 发起PK挑战 - 使用带技能的状态显示
     match PKD.challenge(challenger_stats, defender_stats).await {
-        Ok(battle) => battle.generate_status(),
+        Ok(battle) => battle.generate_status_for_player(userid),
         Err(e) => format!("§R{}§N", e),
     }
 }
@@ -1254,33 +1369,49 @@ async fn pk_command(
 async fn pk_continue_command(userid: &str) -> String {
     use crate::gamenv::single::daemons::pkd::PKD;
 
+    println!("[PK_CONTINUE] User {} requested battle continue", userid);
+
     match PKD.get_player_battle(userid).await {
         Some(battle) => {
+            println!("[PK_CONTINUE] Found battle {}, status: {:?}", battle.battle_id, battle.status);
             if battle.status == crate::gamenv::single::daemons::pkd::CombatStatus::Fighting {
                 // 执行下一回合
+                println!("[PK_CONTINUE] Executing next round");
                 if let Some(round) = PKD.next_round(&battle.battle_id).await {
+                    println!("[PK_CONTINUE] Round executed, ended: {}", round.ended);
                     if round.ended {
                         // 战斗结束，重新获取战斗以获得最终状态
                         if let Some(final_battle) = PKD.get_battle(&battle.battle_id).await {
                             let result = final_battle.generate_result();
                             // 清理战斗
                             PKD.end_battle(&battle.battle_id).await;
+                            println!("[PK_CONTINUE] Battle ended, result length: {}", result.len());
                             result
                         } else {
                             // 战斗已被清理，使用原始数据生成结果
                             let result = battle.generate_result();
                             PKD.end_battle(&battle.battle_id).await;
+                            println!("[PK_CONTINUE] Battle ended (fallback), result length: {}", result.len());
                             result
                         }
                     } else {
-                        // 战斗继续：重新获取战斗状态以获得更新后的HP
-                        let updated_battle = PKD.get_player_battle(userid).await;
-
-                        // 先显示战斗状态（含按钮）
-                        let mut output = if let Some(b) = updated_battle {
-                            b.generate_status()
+                        // 战斗继续：使用新的带技能的状态显示
+                        println!("[PK_CONTINUE] Battle continuing, getting status");
+                        let mut output = if let Some(status) = PKD.get_player_battle_status(userid).await {
+                            println!("[PK_CONTINUE] Got status from PKD, length: {}", status.len());
+                            status
                         } else {
-                            battle.generate_status()
+                            // Fallback - 直接获取战斗并生成带技能的状态
+                            println!("[PK_CONTINUE] No status from PKD, getting battle directly");
+                            let updated_battle = PKD.get_player_battle(userid).await;
+                            if let Some(b) = updated_battle {
+                                let status = b.generate_status_for_player(userid);
+                                println!("[PK_CONTINUE] Generated status from battle, length: {}", status.len());
+                                status
+                            } else {
+                                println!("[PK_CONTINUE] ERROR: Cannot get battle!");
+                                "无法获取战斗状态！\n[返回:look]".to_string()
+                            }
                         };
 
                         // 添加战斗日志到最下面
@@ -1291,19 +1422,30 @@ async fn pk_continue_command(userid: &str) -> String {
                             output.push_str("\n");
                         }
 
+                        // 显示使用的技能
+                        if let Some(ref skill) = round.skill_used {
+                            if let Some(ref effect) = round.skill_effect {
+                                output.push_str(&format!("\n§Y技能效果: {}§N\n", effect));
+                            }
+                        }
+
+                        println!("[PK_CONTINUE] Final output length: {}", output.len());
                         output
                     }
                 } else {
+                    println!("[PK_CONTINUE] next_round returned None");
                     "战斗已结束！\n[返回:look]".to_string()
                 }
             } else {
                 // 战斗已结束，清理并显示结果
+                println!("[PK_CONTINUE] Battle not in Fighting state");
                 let result = battle.generate_result();
                 PKD.end_battle(&battle.battle_id).await;
                 result
             }
         }
         None => {
+            println!("[PK_CONTINUE] No battle found for user {}", userid);
             "你不在战斗中！\n[返回房间:look]".to_string()
         }
     }
@@ -1327,6 +1469,35 @@ async fn surrender_command(userid: &str) -> String {
         Ok(msg) => format!("{}\n[返回房间:look]", msg),
         Err(e) => e,
     }
+}
+
+/// 技能施放命令
+async fn cast_command(userid: &str, skill_id: &str) -> String {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    match PKD.select_skill(userid, skill_id).await {
+        Ok(msg) => format!("{}\n[继续战斗:pk continue]", msg),
+        Err(e) => format!("§c{}§N\n[查看技能:skills]", e),
+    }
+}
+
+/// 技能列表命令
+async fn skills_command(userid: &str) -> String {
+    use crate::gamenv::single::daemons::pkd::PKD;
+
+    println!("[DEBUG] skills_command called for user: {}", userid);
+    let result = match PKD.get_player_skills_list(userid).await {
+        Some(skills) => {
+            println!("[DEBUG] skills list: {:?}", skills);
+            skills
+        },
+        None => {
+            println!("[DEBUG] user not in battle");
+            "你不在战斗中！\n[返回:look]".to_string()
+        }
+    };
+    println!("[DEBUG] returning skills list length: {}", result.len());
+    result
 }
 
 /// 获取方向名称
@@ -1455,8 +1626,21 @@ impl From<String> for ApiError {
     }
 }
 
-/// Home page
-pub async fn index() -> Html<&'static str> {
+/// Home page - serves Vue app
+pub async fn index() -> Html<String> {
+    // Read the Vue index.html file (try multiple possible paths)
+    let paths = [
+        "/usr/local/games/rust/web/web_vue/dist/index.html",
+        "dist/index.html",
+        "../dist/index.html",
+    ];
+
+    for path in &paths {
+        if let Ok(content) = std::fs::read_to_string(path) {
+            return Html(content);
+        }
+    }
+
     Html(r#"
 <!DOCTYPE html>
 <html>
@@ -1467,17 +1651,55 @@ pub async fn index() -> Html<&'static str> {
 <body>
     <h1>RustMUD - Rust MUD Engine</h1>
     <p>1:1 Port of txpike9</p>
-    <p>WebSocket: ws://localhost:8080/ws</p>
+    <p>Frontend not found. Please run: cd web/web_vue && npm run build</p>
 </body>
 </html>
-"#)
+"#.to_string())
 }
 
-/// Static files handler
+/// Static files handler - serves Vue app assets
 pub async fn static_files(
-    axum::extract::Path(_path): axum::extract::Path<String>
-) -> impl axum::response::IntoResponse {
-    (axum::http::StatusCode::NOT_FOUND, "Not found")
+    axum::extract::Path(path): axum::extract::Path<String>
+) -> Response {
+    use std::path::Path;
+    use axum::http::{StatusCode, HeaderValue, header};
+
+    // Remove leading slash if present
+    let path = path.trim_start_matches('/');
+
+    // Try multiple possible paths for the dist directory
+    let base_paths = [
+        Path::new("/usr/local/games/rust/web/web_vue/dist"),
+        Path::new("dist"),
+        Path::new("../dist"),
+    ];
+
+    for base_path in &base_paths {
+        let file_path = base_path.join(path);
+        if let Ok(content) = std::fs::read(&file_path) {
+            // Determine content type
+            let content_type = if path.ends_with(".js") {
+                "application/javascript"
+            } else if path.ends_with(".css") {
+                "text/css"
+            } else if path.ends_with(".json") {
+                "application/json"
+            } else if path.ends_with(".html") {
+                "text/html"
+            } else {
+                "text/plain"
+            };
+
+            let mut response = content.into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(content_type)
+            );
+            return response;
+        }
+    }
+
+    (StatusCode::NOT_FOUND, "Not found").into_response()
 }
 
 /// Get user info
@@ -1514,4 +1736,242 @@ pub async fn save_invite_url(
         "status": "success",
         "message": "URL saved"
     })))
+}
+
+/// learn命令 - 拜师学艺
+async fn learn_command(
+    userid: &str,
+    player_state: &Arc<tokio::sync::RwLock<crate::gamenv::player_state::PlayerState>>,
+    args: &[&str],
+) -> String {
+    use crate::gamenv::school::{get_schoold, PlayerSkill};
+
+    if args.is_empty() {
+        return "§H【拜师学艺】§N\n\n用法: learn <技能ID>\n示例: learn taijiquan\n\n可用技能列表请使用「schools」命令查看各门派技能。".to_string();
+    }
+
+    let skill_id = args[0].to_string();
+    let schoold = get_schoold().read().await;
+
+    // 检查技能是否存在
+    let skill = match schoold.get_skill(&skill_id) {
+        Some(skill) => skill.clone(),
+        None => return format!("§c找不到该技能: {}§N\n\n可用技能列表请使用「schools」命令查看。", skill_id),
+    };
+
+    // 检查根骨要求
+    let player = player_state.read().await;
+    // TODO: 添加根骨属性到PlayerState
+    // if player.get_gengu() < skill.need_gengu_level as i32 {
+    //     return format!("§c你的根骨不足以学习此技能！§N\n需要根骨: {}", skill.need_gengu_level);
+    // }
+
+    // 检查是否已经学过
+    let current_level = if let Some(ps) = player.skills.get(&skill_id) {
+        Some(ps.level)
+    } else {
+        None
+    };
+    drop(player);
+
+    if let Some(level) = current_level {
+        return format!("§c你已经学过 {}§N\n当前等级: {}", skill.name_cn, level);
+    }
+
+    // 检查潜能
+    let player = player_state.read().await;
+    if player.potential < 10 {
+        drop(player);
+        return "§c你的潜能不足！§N\n学习技能需要消耗10点潜能。".to_string();
+    }
+    drop(player);
+
+    // 学习技能
+    let mut player = player_state.write().await;
+    player.potential -= 10;
+    player.skills.insert(skill_id.clone(), PlayerSkill::new(skill_id.clone()));
+    player.school = Some(skill.school.clone());
+    player.school_rank = Some("弟子".to_string());
+
+    let school_name = schoold.get_school(&skill.school)
+        .map(|s| s.name_cn.as_str())
+        .unwrap_or("未知");
+
+    format!("§G你学会了 {}！§N\n\n技能: {}\n类型: {}\n门派: {}\n\n剩余潜能: {}\n\n使用「exercise {}」来修炼此技能。",
+        skill.name_cn, skill.name_cn, skill.skill_type,
+        school_name,
+        player.potential,
+        skill_id
+    )
+}
+
+/// exercise命令 - 修炼武功
+async fn exercise_command(
+    userid: &str,
+    player_state: &Arc<tokio::sync::RwLock<crate::gamenv::player_state::PlayerState>>,
+    args: &[&str],
+) -> String {
+    use crate::gamenv::school::get_schoold;
+
+    let skill_id = if args.is_empty() {
+        // 如果没有指定技能，使用第一个已学技能
+        let player = player_state.read().await;
+        if player.skills.is_empty() {
+            drop(player);
+            return "§c你还没有学过任何技能！§N\n\n使用「learn <技能ID>」来学习技能。\n使用「schools」查看所有门派技能。".to_string();
+        }
+        player.skills.keys().next().unwrap().clone()
+    } else {
+        args[0].to_string()
+    };
+
+    // 先检查HP
+    {
+        let player = player_state.read().await;
+        if !player.skills.contains_key(&skill_id) {
+            drop(player);
+            return format!("§c你还没有学过 {}！§N\n使用「learn {}」来学习此技能。", skill_id, skill_id);
+        }
+        if player.hp < 10 {
+            drop(player);
+            return "§c你的体力不足，无法修炼！§N\n休息一下再练吧（使用「rest」恢复体力）。".to_string();
+        }
+    }
+
+    let schoold = get_schoold().read().await;
+    let skill = match schoold.get_skill(&skill_id) {
+        Some(skill) => skill,
+        None => {
+            return format!("§c找不到技能: {}§N", skill_id);
+        }
+    };
+
+    // 执行修炼
+    let mut player = player_state.write().await;
+
+    // 消耗HP
+    player.hp = player.hp.saturating_sub(10);
+
+    // 获取技能可变引用
+    let player_skill = player.skills.get_mut(&skill_id).unwrap();
+
+    // 增加技能经验（简化版，每次修炼获得1-3点经验）
+    let exp_gain = (rand::random::<u32>() % 3) + 1;
+    let levelups = player_skill.add_exp(exp_gain as u64, skill);
+
+    let current_exp_needed = crate::gamenv::school::Skill::exp_needed_for_level(player_skill.level);
+
+    let mut result = format!(
+        "§H修炼 {}§N\n\n获得经验: {}\n当前等级: {}\n当前经验: {}/{}\n",
+        skill.name_cn, exp_gain, player_skill.level, player_skill.exp, current_exp_needed
+    );
+
+    if levelups > 0 {
+        result.push_str(&format!("§G恭喜！你提升了 {} 级！§N\n\n", levelups));
+
+        // 检查是否解锁了新招式
+        let mut new_performs = Vec::new();
+        for (perform_id, required_level) in &skill.performs {
+            if *required_level <= player_skill.level
+                && !player_skill.learned_performs.contains(perform_id) {
+                player_skill.learned_performs.push(perform_id.clone());
+                new_performs.push(perform_id.clone());
+            }
+        }
+
+        if !new_performs.is_empty() {
+            result.push_str("§Y解锁新招式:§N\n");
+            for perform_id in &new_performs {
+                result.push_str(&format!("  - {}\n", perform_id));
+            }
+        }
+    }
+
+    result.push_str(&format!("\n当前HP: {}/{}", player.hp, player.hp_max));
+
+    result
+}
+
+/// school命令 - 查看门派信息
+async fn school_command(
+    player_state: &Arc<tokio::sync::RwLock<crate::gamenv::player_state::PlayerState>>,
+) -> String {
+    use crate::gamenv::school::get_schoold;
+
+    let player = player_state.read().await;
+    let school_id = match &player.school {
+        Some(school) => school.clone(),
+        None => {
+            drop(player);
+            return "§c你还没有加入任何门派！§N\n\n使用「schools」查看所有门派。\n使用「learn <技能ID>」拜师学艺。".to_string();
+        }
+    };
+
+    let schoold = get_schoold().read().await;
+    let school = match schoold.get_school(&school_id) {
+        Some(school) => school,
+        None => {
+            drop(player);
+            return "§c门派信息错误！§N".to_string();
+        }
+    };
+
+    let mut result = format!("§H【{}】§N\n\n{}\n\n", school.name_cn, school.description);
+    result.push_str(&format!("职位: {}\n\n", player.school_rank.as_ref().unwrap_or(&"无".to_string())));
+    result.push_str("§H已学技能:§N\n");
+
+    if player.skills.is_empty() {
+        result.push_str("  无\n\n");
+    } else {
+        for (skill_id, player_skill) in &player.skills {
+            if let Some(skill) = schoold.get_skill(skill_id) {
+                result.push_str(&format!("  {} - Lv.{} (经验: {}/{})\n",
+                    skill.name_cn,
+                    player_skill.level,
+                    player_skill.exp,
+                    crate::gamenv::school::Skill::exp_needed_for_level(player_skill.level)
+                ));
+            }
+        }
+        result.push_str("\n");
+    }
+
+    result.push_str("§H门派技能:§N\n");
+    for skill_id in &school.skills {
+        if let Some(skill) = schoold.get_skill(skill_id) {
+            let learned = player.skills.contains_key(skill_id);
+            result.push_str(&format!("  [{}:learn {}] - {}\n",
+                skill.name_cn,
+                skill.id,
+                if learned { "§G已学§N" } else { "§c未学§N" }
+            ));
+        }
+    }
+
+    result
+}
+
+/// schools命令 - 查看所有门派
+async fn schools_command() -> String {
+    use crate::gamenv::school::get_schoold;
+
+    let schoold = get_schoold().read().await;
+    let schools = schoold.get_all_schools();
+
+    let mut result = "§H【天下门派】§N\n\n".to_string();
+
+    for school in schools {
+        result.push_str(&format!("§Y{}§N - {}\n", school.name_cn, school.name));
+        result.push_str(&format!("  {}\n\n", school.description));
+    }
+
+    result.push_str("使用「learn <技能ID>」拜师学艺\n");
+    result.push_str("示例: learn taijiquan\n\n");
+
+    result.push_str("§H主要技能列表:§N\n");
+    result.push_str("[taijiquan:learn taijiquan] - 太极拳 (武当)\n");
+    result.push_str("[xingyi_quan:learn xingyi_quan] - 形意拳 (武当)\n");
+    result.push_str("[bagua_zhang:learn bagua_zhang] - 八卦掌 (武当)\n");
+
+    result
 }
