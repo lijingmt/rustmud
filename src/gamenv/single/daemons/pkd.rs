@@ -314,12 +314,14 @@ pub struct PkBattle {
     pub defender_skills: FighterSkills,
     /// 玩家选择的技能 (player_id -> skill_id)
     pub pending_skills: HashMap<String, String>,
+    /// 上一回合执行时间（用于心跳自动推进）
+    pub last_round_time: i64,
 }
 
 impl PkBattle {
     pub fn new(challenger: CombatStats, defender: CombatStats) -> Self {
         let battle_id = format!("pk_{}_{}", challenger.id, defender.id);
-        let start_time = std::time::SystemTime::now()
+        let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
@@ -343,13 +345,78 @@ impl PkBattle {
             round: 0,
             total_damage_dealt: 0,
             total_damage_taken: 0,
-            start_time,
+            start_time: now,
             status: CombatStatus::Fighting,
             combat_log: vec![],
             challenger_skills,
             defender_skills,
             pending_skills: HashMap::new(),
+            last_round_time: now,
         }
+    }
+
+    /// 检查是否是NPC（ID包含'/'）
+    pub fn is_npc(id: &str) -> bool {
+        id.contains('/')
+    }
+
+    /// 检查战斗中是否包含NPC
+    pub fn has_npc(&self) -> bool {
+        Self::is_npc(&self.challenger.id) || Self::is_npc(&self.defender.id)
+    }
+
+    /// 获取NPC的ID（如果存在）
+    pub fn get_npc_id(&self) -> Option<String> {
+        if Self::is_npc(&self.challenger.id) {
+            Some(self.challenger.id.clone())
+        } else if Self::is_npc(&self.defender.id) {
+            Some(self.defender.id.clone())
+        } else {
+            None
+        }
+    }
+
+    /// 检查是否应该自动执行下一回合（有NPC且距离上次执行超过2秒）
+    pub fn should_auto_execute(&self) -> bool {
+        if !self.has_npc() {
+            return false;
+        }
+        if self.status != CombatStatus::Fighting {
+            return false;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        now - self.last_round_time >= 2  // 2秒后自动执行
+    }
+
+    /// NPC自动选择技能
+    pub fn npc_select_skill(&self, npc_id: &str) -> String {
+        let skills = if npc_id == &self.challenger.id {
+            &self.challenger_skills
+        } else {
+            &self.defender_skills
+        };
+
+        // 获取所有可用技能
+        let available = skills.get_available_skills();
+        if available.is_empty() {
+            return "skill_basic_attack".to_string();
+        }
+
+        // 30%几率使用技能，否则普通攻击
+        if rand::random::<f32>() < 0.3 && available.len() > 1 {
+            // 随机选择一个非基础技能
+            let special_skills: Vec<_> = available.iter()
+                .filter(|s| *s != "skill_basic_attack")
+                .collect();
+            if !special_skills.is_empty() {
+                return special_skills[rand::random::<usize>() % special_skills.len()].clone();
+            }
+        }
+
+        "skill_basic_attack".to_string()
     }
 
     /// 根据等级添加技能
@@ -539,6 +606,12 @@ impl PkBattle {
 
     /// 执行一个战斗回合
     pub fn execute_round(&mut self) -> CombatRound {
+        // 更新最后执行时间
+        self.last_round_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
         self.round += 1;
 
         let mut attacker_damage = 0;
@@ -1128,6 +1201,75 @@ impl PkDaemon {
             Some(battle.generate_skills_list(player_id))
         } else {
             None
+        }
+    }
+
+    /// 处理心跳 - 自动执行包含NPC的战斗回合
+    /// 返回执行的战斗数量和需要通知的玩家
+    pub async fn process_heartbeat(&self) -> (usize, Vec<(String, String)>) {
+        let mut battles = self.battles.write().await;
+        let mut executed_count = 0;
+        let mut notifications = Vec::new();
+
+        // 收集需要处理的战斗ID（避免在迭代时修改）
+        let battles_to_process: Vec<String> = battles.values()
+            .filter(|b| b.should_auto_execute())
+            .map(|b| b.battle_id.clone())
+            .collect();
+
+        for battle_id in battles_to_process {
+            if let Some(battle) = battles.get_mut(&battle_id) {
+                // NPC自动选择技能
+                if let Some(npc_id) = battle.get_npc_id() {
+                    let npc_skill = battle.npc_select_skill(&npc_id);
+                    battle.pending_skills.insert(npc_id, npc_skill);
+                }
+
+                // 执行回合
+                if battle.status == CombatStatus::Fighting {
+                    let round = battle.execute_round();
+
+                    // 收集需要通知的玩家
+                    if !PkBattle::is_npc(&battle.challenger.id) {
+                        notifications.push((battle.challenger.id.clone(), battle_id.clone()));
+                    }
+                    if !PkBattle::is_npc(&battle.defender.id) {
+                        notifications.push((battle.defender.id.clone(), battle_id.clone()));
+                    }
+
+                    // 检查战斗是否结束
+                    if round.ended {
+                        battle.status = CombatStatus::Dead;
+                        // 战斗结束，将在下次查询时清理
+                    }
+
+                    executed_count += 1;
+                }
+            }
+        }
+
+        (executed_count, notifications)
+    }
+
+    /// 启动心跳任务
+    pub async fn start_heartbeat_task(daemon: Arc<PkDaemon>) {
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(1));
+
+        loop {
+            interval.tick().await;
+
+            let (executed, notifications) = daemon.process_heartbeat().await;
+
+            if executed > 0 {
+                tracing::debug!("[PKD Heartbeat] Executed {} battles", executed);
+            }
+
+            // 通知在线玩家刷新战斗界面
+            for (player_id, _battle_id) in notifications {
+                // 这里可以通过HTTP API通知前端刷新
+                // 目前先记录日志
+                tracing::debug!("[PKD Heartbeat] Notify player {} to refresh", player_id);
+            }
         }
     }
 }

@@ -8,6 +8,7 @@ mod gamenv;
 use rustenv::rustenv::RustenvServer;
 use gamenv::http_api;
 use gamenv::quest::QUESTD;
+use gamenv::single::daemons::pkd::{PkDaemon, get_pkd};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 启动 rustenv 服务器
@@ -19,6 +20,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = QUESTD.initialize(&data_dir).await {
             eprintln!("Failed to initialize quest system: {:?}", e);
         }
+
+        // 启动 PKD 心跳任务（处理NPC自动战斗）
+        let pkd = get_pkd().await;
+        let heartbeat_handle = tokio::spawn(async {
+            tracing::info!("PKD heartbeat task started");
+            PkDaemon::start_heartbeat_task(pkd).await;
+        });
 
         // 启动 HTTP API 服务器
         let http_handle = tokio::spawn(async {
@@ -37,8 +45,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         });
 
-        // 等待两个服务器
+        // 等待任务
         tokio::select! {
+            _ = heartbeat_handle => {
+                eprintln!("PKD heartbeat task stopped");
+                Ok(())
+            }
             _ = http_handle => {
                 eprintln!("HTTP API server stopped");
                 Ok(())
