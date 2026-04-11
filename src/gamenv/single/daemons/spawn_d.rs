@@ -1,13 +1,19 @@
 // gamenv/single/daemons/spawn_d.rs - NPC刷新守护进程
 // 对应 txpike9/gamenv/single/daemons/boss_npcd.pike, dnpchotd.pike
+//
+// 负责NPC的刷新和重生:
+// - NPC死亡后从房间移除
+// - 30秒后在原位置刷新
 
 use crate::core::*;
 use crate::gamenv::world::*;
+use crate::gamenv::efuns::{destruct, register_object, ObjectType};
+use crate::gamenv::clone::npc::create_npc_from_template;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
-use tokio::time::{interval, Duration};
+use tokio::time::{interval, Duration, sleep};
 
 /// 刷新区域
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -59,7 +65,62 @@ impl SpawnZone {
     }
 }
 
-/// 刷新的NPC信息
+/// 普通NPC刷新点配置 (对应非Boss的野怪)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NpcSpawnPoint {
+    /// 模板ID
+    pub template_id: String,
+    /// 刷新房间ID
+    pub room_id: String,
+    /// 最大同时存在数量
+    pub max_count: usize,
+    /// 刷新间隔(秒)
+    pub respawn_time: u64,
+    /// 当前活跃的NPC列表
+    pub active_npcs: Vec<String>,
+    /// 待刷新的NPC (death_time, template_id, room_id)
+    pub pending_respawns: Vec<(i64, String, String)>,
+}
+
+impl NpcSpawnPoint {
+    pub fn new(template_id: String, room_id: String) -> Self {
+        Self {
+            template_id,
+            room_id,
+            max_count: 1,
+            respawn_time: 30, // 默认30秒刷新
+            active_npcs: Vec::new(),
+            pending_respawns: Vec::new(),
+        }
+    }
+
+    pub fn with_max_count(mut self, count: usize) -> Self {
+        self.max_count = count;
+        self
+    }
+
+    pub fn with_respawn_time(mut self, seconds: u64) -> Self {
+        self.respawn_time = seconds;
+        self
+    }
+
+    /// 检查是否可以刷新
+    pub fn can_spawn(&self) -> bool {
+        self.active_npcs.len() < self.max_count
+    }
+
+    /// 移除死亡的NPC
+    pub fn remove_npc(&mut self, npc_id: &str) {
+        self.active_npcs.retain(|id| id != npc_id);
+    }
+
+    /// 添加待刷新NPC
+    pub fn add_pending_respawn(&mut self, death_time: i64, template_id: String, room_id: String) {
+        self.pending_respawns.push((death_time, template_id, room_id));
+    }
+}
+
+/// 刷新的NPC信息 (Boss用)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SpawnedNpc {
     /// NPC ID
@@ -119,7 +180,7 @@ pub struct BossConfig {
 
 /// 刷新守护进程
 pub struct SpawnDaemon {
-    /// 已刷新的NPC
+    /// 已刷新的NPC (Boss)
     spawned_npcs: HashMap<String, SpawnedNpc>,
     /// Boss配置
     boss_configs: Vec<BossConfig>,
@@ -127,6 +188,8 @@ pub struct SpawnDaemon {
     last_spawn_times: HashMap<String, i64>,
     /// 当前在线玩家数
     online_players: usize,
+    /// 普通NPC刷新点: room_id -> Vec<NpcSpawnPoint>
+    npc_spawn_points: HashMap<String, Vec<NpcSpawnPoint>>,
 }
 
 impl SpawnDaemon {
@@ -137,10 +200,36 @@ impl SpawnDaemon {
             boss_configs: Vec::new(),
             last_spawn_times: HashMap::new(),
             online_players: 0,
+            npc_spawn_points: HashMap::new(),
         };
 
         daemon.init_boss_configs();
+        daemon.init_npc_spawn_points();
         daemon
+    }
+
+    /// 初始化普通NPC刷新点
+    fn init_npc_spawn_points(&mut self) {
+        // 新手村野狼
+        self.add_npc_spawn_point(NpcSpawnPoint::new(
+            "mob/wolf".to_string(),
+            "xinshoucun/changetang".to_string(),
+        ).with_max_count(3).with_respawn_time(30));
+
+        // 新手村村民
+        self.add_npc_spawn_point(NpcSpawnPoint::new(
+            "npc/villager".to_string(),
+            "xinshoucun/changetang".to_string(),
+        ).with_max_count(5).with_respawn_time(60));
+    }
+
+    /// 添加NPC刷新点
+    pub fn add_npc_spawn_point(&mut self, spawn: NpcSpawnPoint) {
+        let room_id = spawn.room_id.clone();
+        self.npc_spawn_points
+            .entry(room_id)
+            .or_insert_with(Vec::new)
+            .push(spawn);
     }
 
     /// 初始化Boss配置
@@ -328,6 +417,102 @@ impl SpawnDaemon {
         before - self.spawned_npcs.len()
     }
 
+    // ==================== 普通NPC死亡和刷新处理 ====================
+
+    /// 处理NPC死亡 (对外接口)
+    pub async fn on_npc_died(&mut self, npc_id: &str, template_id: &str, room_id: &str) {
+        tracing::info!("NPC died: {} (template: {}, room: {})", npc_id, template_id, room_id);
+
+        // 1. 从刷新点移除
+        self.remove_npc_from_spawn_point(room_id, template_id, npc_id);
+
+        // 2. 从世界中销毁NPC
+        destruct(npc_id).await;
+
+        // 3. 安排刷新
+        let now = chrono::Utc::now().timestamp();
+        self.add_pending_respawn(room_id, template_id, now);
+    }
+
+    /// 从刷新点移除NPC
+    fn remove_npc_from_spawn_point(&mut self, room_id: &str, template_id: &str, npc_id: &str) {
+        if let Some(spawns) = self.npc_spawn_points.get_mut(room_id) {
+            for spawn in spawns.iter_mut() {
+                if spawn.template_id == template_id {
+                    spawn.remove_npc(npc_id);
+                }
+            }
+        }
+    }
+
+    /// 添加待刷新NPC
+    fn add_pending_respawn(&mut self, room_id: &str, template_id: &str, death_time: i64) {
+        if let Some(spawns) = self.npc_spawn_points.get_mut(room_id) {
+            for spawn in spawns.iter_mut() {
+                if spawn.template_id == template_id {
+                    spawn.add_pending_respawn(death_time, template_id.to_string(), room_id.to_string());
+                }
+            }
+        }
+    }
+
+    /// 处理刷新 (每秒调用一次)
+    pub async fn process_respawns(&mut self) {
+        let now = chrono::Utc::now().timestamp();
+
+        for (_room_id, spawns) in self.npc_spawn_points.iter_mut() {
+            for spawn in spawns.iter_mut() {
+                let respawn_time = spawn.respawn_time as i64;
+                let can_spawn = spawn.can_spawn();
+                let mut still_pending = Vec::new();
+
+                // 先把待刷新列表取出来，避免借用问题
+                let pending: Vec<_> = spawn.pending_respawns.drain(..).collect();
+
+                for (death_time, template_id, room_id) in pending {
+                    let elapsed = now - death_time;
+
+                    if elapsed >= respawn_time {
+                        if can_spawn {
+                            // 执行刷新
+                            if let Some(npc) = create_npc_from_template(&template_id).await {
+                                let new_npc_id = npc.character.id.clone();
+
+                                // 注册到世界
+                                register_object(
+                                    new_npc_id.clone(),
+                                    ObjectType::Npc,
+                                    Some(room_id.clone()),
+                                ).await;
+
+                                // 添加到活跃列表
+                                spawn.active_npcs.push(new_npc_id.clone());
+
+                                tracing::info!(
+                                    "NPC respawned: {} (template: {}, room: {})",
+                                    new_npc_id,
+                                    template_id,
+                                    room_id
+                                );
+                            } else {
+                                // 刷新失败，继续等待
+                                still_pending.push((death_time, template_id, room_id));
+                            }
+                        } else {
+                            // 已达最大数量，继续等待
+                            still_pending.push((death_time, template_id, room_id));
+                        }
+                    } else {
+                        // 还没到刷新时间
+                        still_pending.push((death_time, template_id, room_id));
+                    }
+                }
+
+                spawn.pending_respawns = still_pending;
+            }
+        }
+    }
+
     /// NPC被击杀
     pub fn on_npc_killed(&mut self, npc_id: &str, killer_name: &str) -> String {
         let mut msg = String::new();
@@ -391,26 +576,36 @@ impl SpawnDaemon {
     pub async fn start_spawn_task(&mut self, world: Arc<TokioRwLock<GameWorld>>) {
         let daemon = Arc::new(TokioRwLock::new(self.clone_ref()));
 
-        // 每分钟检查一次
-        let mut interval = interval(Duration::from_secs(60));
+        // 每秒检查一次NPC刷新，每分钟检查Boss
+        let mut interval = interval(Duration::from_secs(1));
+        let mut boss_counter = 0;
 
         loop {
             interval.tick().await;
+            boss_counter += 1;
 
             let mut daemon_guard = daemon.write().await;
-            let world_guard = world.read().await;
 
-            // 清理过期NPC
-            daemon_guard.cleanup_expired();
+            // 每秒都处理NPC刷新
+            daemon_guard.process_respawns().await;
 
-            // 检查每个Boss配置
-            for config in daemon_guard.boss_configs.clone() {
-                if daemon_guard.can_spawn(&config) {
-                    if let Some(spawned) = daemon_guard.spawn_boss(&config, &world_guard) {
-                        let broadcast = daemon_guard.format_broadcast(&config, &spawned.zone);
-                        // 这里应该广播给所有在线玩家
-                        log::info!("Boss spawned: {} in {}", config.name, spawned.zone.as_str());
-                        log::info!("Broadcast: {}", broadcast);
+            // 每分钟检查一次Boss刷新
+            if boss_counter >= 60 {
+                boss_counter = 0;
+                let world_guard = world.read().await;
+
+                // 清理过期NPC
+                daemon_guard.cleanup_expired();
+
+                // 检查每个Boss配置
+                for config in daemon_guard.boss_configs.clone() {
+                    if daemon_guard.can_spawn(&config) {
+                        if let Some(spawned) = daemon_guard.spawn_boss(&config, &world_guard) {
+                            let broadcast = daemon_guard.format_broadcast(&config, &spawned.zone);
+                            // 这里应该广播给所有在线玩家
+                            log::info!("Boss spawned: {} in {}", config.name, spawned.zone.as_str());
+                            log::info!("Broadcast: {}", broadcast);
+                        }
                     }
                 }
             }
@@ -424,6 +619,7 @@ impl SpawnDaemon {
             boss_configs: self.boss_configs.clone(),
             last_spawn_times: self.last_spawn_times.clone(),
             online_players: self.online_players,
+            npc_spawn_points: self.npc_spawn_points.clone(),
         }
     }
 }
@@ -440,4 +636,13 @@ pub static SPAWND: std::sync::OnceLock<TokioRwLock<SpawnDaemon>> = std::sync::On
 /// 获取刷新守护进程
 pub fn get_spawnd() -> &'static TokioRwLock<SpawnDaemon> {
     SPAWND.get_or_init(|| TokioRwLock::new(SpawnDaemon::default()))
+}
+
+/// NPC死亡 (全局接口，供战斗系统调用)
+///
+/// 当NPC被杀死时调用此函数，NPC会从房间消失，30秒后刷新
+pub async fn npc_died(npc_id: &str, template_id: &str, room_id: &str) {
+    let daemon = get_spawnd();
+    let mut daemon = daemon.write().await;
+    daemon.on_npc_died(npc_id, template_id, room_id).await;
 }

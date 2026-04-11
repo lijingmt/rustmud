@@ -27,6 +27,7 @@ pub mod hidden_cmd;
 pub mod traits;
 pub mod entities;
 pub mod output;
+pub mod efuns;
 
 pub use master::*;
 pub use user::*;

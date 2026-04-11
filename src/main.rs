@@ -9,8 +9,9 @@ use rustenv::rustenv::RustenvServer;
 use gamenv::http_api;
 use gamenv::quest::QUESTD;
 use gamenv::single::daemons::pkd::{PkDaemon, get_pkd};
-// 新架构：克隆模板注册表
+// 新架构：克隆模板注册表 + 世界状态
 use gamenv::clone::{init_item_templates, init_npc_templates};
+use gamenv::efuns::init_world_state;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 初始化 tracing（必须在所有 tokio::spawn 之前）
@@ -40,6 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         init_item_templates().await;
         init_npc_templates().await;
         tracing::info!("Clone template registries initialized");
+
+        // 初始化世界状态 (核心MUD操作: move_object, environment, destruct)
+        init_world_state().await;
+        tracing::info!("World state (efuns) initialized");
 
         // 获取 PKD 守护进程实例
         let pkd = get_pkd().await;
