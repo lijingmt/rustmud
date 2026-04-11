@@ -9,8 +9,7 @@ use rustenv::rustenv::RustenvServer;
 use gamenv::http_api;
 use gamenv::quest::QUESTD;
 use gamenv::single::daemons::pkd::{PkDaemon, get_pkd};
-use gamenv::single::daemons::spawn_d::{SpawnDaemon, get_spawnd};
-use gamenv::world::get_world;
+use gamenv::world::{get_world, try_reset_room};
 // 新架构：克隆模板注册表 + 世界状态
 use gamenv::clone::{init_item_templates, init_npc_templates};
 use gamenv::efuns::init_world_state;
@@ -51,23 +50,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // 获取 PKD 守护进程实例
         let pkd = get_pkd().await;
 
-        // 获取世界和spawn守护进程
-        let world = get_world();
-        let spawnd = get_spawnd();
-        tracing::info!("Spawn daemon initialized");
+        // 初始化房间NPC刷新配置
+        {
+            let world = get_world();
+            let mut world = world.write().await;
+            if let Some(room) = world.rooms.get_mut("xinshoucun/changetang") {
+                // 配置村民刷新：最多5个，60秒刷新
+                room.add_spawn_config("xinshoucun/cunmin".to_string(), 5, 60);
+                // 设置重置间隔为100秒（对应txpike9的reset_interval=100）
+                room.reset_interval = 100;
+            }
+        }
 
-        // 启动四个任务，它们将同时运行
+        // 启动两个任务
         tokio::spawn(async move {
             tracing::info!("PKD heartbeat task started");
             PkDaemon::start_heartbeat_task(pkd).await;
             eprintln!("PKD heartbeat task stopped unexpectedly");
-        });
-
-        // 启动NPC刷新守护进程
-        tokio::spawn(async move {
-            tracing::info!("Spawn daemon heartbeat task started");
-            let mut daemon = spawnd.write().await;
-            daemon.start_spawn_task(world).await;
         });
 
         tokio::spawn(async {

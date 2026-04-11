@@ -27,6 +27,19 @@ pub fn get_world() -> Arc<TokioRwLock<GameWorld>> {
     WORLD.clone()
 }
 
+/// 尝试重置房间（当玩家进入房间时调用）
+///
+/// 对应 txpike9 room.pike 中的 try_reset() 函数
+pub async fn try_reset_room(room_id: &str) {
+    let world = get_world();
+    let mut world = world.write().await;
+    if let Some(room) = world.rooms.get_mut(room_id) {
+        room.try_reset();
+    } else {
+        tracing::warn!("try_reset_room: room '{}' not found", room_id);
+    }
+}
+
 /// 游戏世界
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameWorld {

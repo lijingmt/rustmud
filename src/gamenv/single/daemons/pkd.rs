@@ -316,10 +316,12 @@ pub struct PkBattle {
     pub pending_skills: HashMap<String, String>,
     /// 上一回合执行时间（用于心跳自动推进）
     pub last_round_time: i64,
+    /// 战斗发生的房间ID
+    pub room_id: String,
 }
 
 impl PkBattle {
-    pub fn new(challenger: CombatStats, defender: CombatStats) -> Self {
+    pub fn new(challenger: CombatStats, defender: CombatStats, room_id: String) -> Self {
         let battle_id = format!("pk_{}_{}", challenger.id, defender.id);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -352,6 +354,7 @@ impl PkBattle {
             defender_skills,
             pending_skills: HashMap::new(),
             last_round_time: now,
+            room_id,
         }
     }
 
@@ -1058,7 +1061,8 @@ impl PkDaemon {
     }
 
     /// 发起PK挑战
-    pub async fn challenge(&self, challenger: CombatStats, defender: CombatStats) -> Result<PkBattle, String> {
+    pub async fn challenge(&self, challenger: CombatStats, defender: CombatStats, room_id: String) -> Result<PkBattle, String> {
+        tracing::info!("[PKD] challenge() called with room_id='{}'", room_id);
         // 检查是否可以发起攻击
         challenger.can_attack(&defender)?;
 
@@ -1074,12 +1078,12 @@ impl PkDaemon {
         }
         drop(player_battles);
 
-        println!("[PKD] Challenge: {} vs {}", challenger.id, defender.id);
+        println!("[PKD] Challenge: {} vs {} in room {}", challenger.id, defender.id, room_id);
 
         // 创建战斗
         let challenger_id = challenger.id.clone();
         let defender_id = defender.id.clone();
-        let battle = PkBattle::new(challenger, defender);
+        let battle = PkBattle::new(challenger, defender, room_id);
         let battle_id = battle.battle_id.clone();
 
         let mut battles = self.battles.write().await;
@@ -1150,52 +1154,79 @@ impl PkDaemon {
 
     /// 处理NPC死亡
     async fn handle_npc_death(battle: &PkBattle) {
-        use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
-        use crate::gamenv::single::daemons::spawn_d::npc_died;
+        use crate::gamenv::world::get_world;
 
         tracing::info!("=== handle_npc_death called ===");
         tracing::info!("Challenger: {} (alive: {})", battle.challenger.id, battle.challenger.is_alive());
         tracing::info!("Defender: {} (alive: {})", battle.defender.id, battle.defender.is_alive());
+        tracing::info!("Battle room: {}", battle.room_id);
 
         // 检查防守者是否是NPC（ID格式为 room_id/npc_id）
         let defender_id = &battle.defender.id;
         let challenger_id = &battle.challenger.id;
 
         // 判断哪个是NPC
-        let (npc_id, killed, is_defender) = if defender_id.contains('/') {
-            (defender_id, !battle.defender.is_alive(), true)
+        let (npc_id, killed) = if defender_id.contains('/') {
+            (defender_id, !battle.defender.is_alive())
         } else if challenger_id.contains('/') {
-            (challenger_id, !battle.challenger.is_alive(), false)
+            (challenger_id, !battle.challenger.is_alive())
         } else {
             tracing::info!("Both are players, skipping NPC death handling");
             return; // 双方都是玩家，不需要处理
         };
 
-        tracing::info!("NPC identified: npc_id={}, killed={}, is_defender={}", npc_id, killed, is_defender);
+        tracing::info!("NPC identified: npc_id={}, killed={}", npc_id, killed);
 
         if killed {
-            // 解析房间ID（NPC ID的第一部分是房间）
-            let parts: Vec<&str> = npc_id.split('/').collect();
-            let room_id = parts.first().unwrap_or(&"");
+            // 使用battle中的room_id（战斗发生的实际房间）
+            let room_id = &battle.room_id;
+            let template_id = npc_id.to_string();  // 完整ID作为模板ID
 
-            // 解析NPC模板ID（去掉房间前缀）
-            let template_id = npc_id.to_string();
+            tracing::info!("[PKD] NPC {} killed in room {}, notifying room for respawn",
+                template_id, room_id);
 
-            tracing::info!(
-                "[PKD] NPC {} killed in room {}, notifying spawn_d for respawn",
-                template_id, room_id
-            );
+            // 先从runtime_npc_d中标记NPC为死亡
+            {
+                use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
+                let runtime_npc_d_read = get_runtime_npc_d().read().await;
+                let alive_before = runtime_npc_d_read.get_alive_npcs(room_id);
+                tracing::info!("[PKD] BEFORE: runtime_npc_d alive_npcs for room {}: {:?}", room_id, alive_before);
+                drop(runtime_npc_d_read);
 
-            // 通知运行时NPC守护进程
-            let mut runtime_npc_d = get_runtime_npc_d().write().await;
-            runtime_npc_d.on_npc_killed(&template_id, room_id);
+                let mut runtime_npc_d = get_runtime_npc_d().write().await;
+                runtime_npc_d.on_npc_killed(&template_id, room_id);
+                tracing::info!("[PKD] Marked NPC {} as dead in runtime_npc_d in room {}", npc_id, room_id);
+            }
 
-            // *** 关键: 调用spawn_d的npc_died，实现30秒刷新 ***
-            // 这会从世界中移除NPC，并在30秒后刷新
-            tracing::info!("Calling spawn_d::npc_died with npc_id={}, template_id={}, room_id={}",
-                npc_id, template_id, room_id);
-            npc_died(&template_id, &template_id, room_id).await;
-            tracing::info!("spawn_d::npc_died returned");
+            // 验证runtime_npc_d更新后的状态
+            {
+                use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
+                let runtime_npc_d = get_runtime_npc_d().read().await;
+                let alive_after = runtime_npc_d.get_alive_npcs(room_id);
+                tracing::info!("[PKD] AFTER: runtime_npc_d alive_npcs for room {}: {:?}", room_id, alive_after);
+            }
+
+            // 通知房间的NPC死亡，由房间重置负责刷新
+            let world = get_world();
+            let mut world = world.write().await;
+            if let Some(room) = world.rooms.get_mut(room_id) {
+                tracing::info!("[PKD] Found room {}, current NPCs: {:?}", room_id, room.npcs);
+                room.on_npc_killed(template_id.clone());
+                // 从房间NPC列表中移除一个实例（只移除第一个匹配的）
+                let before_count = room.npcs.len();
+                if let Some(pos) = room.npcs.iter().position(|id| id == npc_id) {
+                    room.npcs.remove(pos);
+                    tracing::info!("[PKD] Removed NPC at position {}", pos);
+                } else {
+                    tracing::warn!("[PKD] NPC {} not found in room.npcs!", npc_id);
+                }
+                let after_count = room.npcs.len();
+                tracing::info!("[PKD] AFTER: room.npcs = {:?}", room.npcs);
+                tracing::info!("[PKD] NPC {} removed from room {} NPCs list: {} -> {} NPCs",
+                    npc_id, room_id, before_count, after_count);
+            } else {
+                tracing::error!("[PKD] Room {} not found in world!", room_id);
+            }
         } else {
             tracing::info!("NPC was not killed (survived the battle)");
         }

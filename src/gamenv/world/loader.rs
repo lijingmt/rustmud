@@ -176,6 +176,10 @@ impl WorldLoader {
             links,
             is_peaceful,
             is_bedroom,
+            spawn_configs: vec![],
+            killed_npcs: vec![],
+            last_reset: 0,
+            reset_interval: 100,
         })
     }
 

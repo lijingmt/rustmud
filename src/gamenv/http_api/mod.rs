@@ -652,7 +652,9 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
     // 对于需要 world 的命令，先获取当前房间
     let player_room = {
         let state = player_state.read().await;
-        state.current_room.clone()
+        let room = state.current_room.clone();
+        tracing::info!("execute_game_command: userid={}, current_room={}", userid, room);
+        room
     };
 
     // 先获取 world 的 Arc，避免临时值问题
@@ -666,8 +668,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
                 let world_guard = world_arc.read().await;
                 let result = move_command(&world_guard, &player_room, direction).await;
                 if result.success {
+                    let new_room = result.new_room.clone();
                     let mut state = player_state.write().await;
-                    state.move_to(result.new_room.clone());
+                    state.move_to(new_room.clone());
+                    drop(state); // 释放锁
+                    drop(world_guard); // 释放world锁
+                    // 调用房间重置（对应txpike9的try_reset）
+                    crate::gamenv::world::try_reset_room(&new_room).await;
                 }
                 result.output
             } else {
@@ -709,8 +716,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "north").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -718,8 +730,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "south").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -727,8 +744,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "east").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -736,8 +758,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "west").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -745,8 +772,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "up").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -754,8 +786,13 @@ async fn execute_game_command(userid: &str, command: &str, _vconn: &VirtualConne
             let world_guard = world_arc.read().await;
             let result = move_command(&world_guard, &player_room, "down").await;
             if result.success {
+                let new_room = result.new_room.clone();
                 let mut state = player_state.write().await;
-                state.move_to(result.new_room.clone());
+                state.move_to(new_room.clone());
+                drop(state); // 释放锁
+                drop(world_guard); // 释放world锁
+                // 调用房间重置（对应txpike9的try_reset）
+                crate::gamenv::world::try_reset_room(&new_room).await;
             }
             result.output
         }
@@ -962,6 +999,8 @@ async fn look_command(world: &crate::gamenv::world::GameWorld, room_id: &str) ->
 
         // 显示NPC - 过滤已死亡的
         let alive_npcs = runtime_npc_d.get_alive_npcs(room_id);
+        tracing::info!("look_command: room_id={}, room.npcs={:?}, runtime_npc_d alive_npcs={:?}",
+            room_id, room.npcs, alive_npcs);
 
         if !alive_npcs.is_empty() {
             output.push_str("\n§C人物§N\n");
@@ -1191,6 +1230,7 @@ async fn pk_command(
     userid: &str,
     target: &str,
 ) -> String {
+    tracing::info!("pk_command called: userid={}, target={}, room_id={}", userid, target, room_id);
     use crate::gamenv::single::daemons::pkd::{PKD, PkMode, CombatStats};
 
     // 获取玩家数据（用于战斗）
@@ -1201,6 +1241,7 @@ async fn pk_command(
     let player_defense = 5;
 
     if let Some(room) = world.get_room(room_id) {
+        tracing::info!("pk_command: room found={}, room.npcs={:?}", room_id, room.npcs);
         // 先检查NPC - 使用PK战斗系统
         for npc_id in &room.npcs {
             if let Some(npc) = world.get_npc(npc_id) {
@@ -1254,7 +1295,8 @@ async fn pk_command(
                     };
 
                     // 发起战斗 - 使用带技能的状态显示
-                    return match PKD.challenge(challenger_stats, defender_stats).await {
+                    tracing::info!("pk_command: calling PKD.challenge with defender.id={}, room_id={}", defender_stats.id, room_id);
+                    return match PKD.challenge(challenger_stats, defender_stats, room_id.to_string()).await {
                         Ok(battle) => {
                             // 使用带技能的状态显示
                             battle.generate_status_for_player(&userid)
@@ -1320,7 +1362,8 @@ async fn pk_command(
                     };
 
                     // 发起战斗 - 使用带技能的状态显示
-                    return match PKD.challenge(challenger_stats, defender_stats).await {
+                    tracing::info!("pk_command: calling PKD.challenge with defender.id={}, room_id={}", defender_stats.id, room_id);
+                    return match PKD.challenge(challenger_stats, defender_stats, room_id.to_string()).await {
                         Ok(battle) => {
                             // 使用带技能的状态显示
                             battle.generate_status_for_player(&userid)
@@ -1385,7 +1428,8 @@ async fn pk_command(
     };
 
     // 发起PK挑战 - 使用带技能的状态显示
-    match PKD.challenge(challenger_stats, defender_stats).await {
+    tracing::info!("pk_command: calling PKD.challenge with room_id={}", room_id);
+    match PKD.challenge(challenger_stats, defender_stats, room_id.to_string()).await {
         Ok(battle) => battle.generate_status_for_player(userid),
         Err(e) => format!("§R{}§N", e),
     }

@@ -419,25 +419,20 @@ impl SpawnDaemon {
 
     // ==================== 普通NPC死亡和刷新处理 ====================
 
-    /// 处理NPC死亡 (对外接口)
-    pub async fn on_npc_died(&mut self, npc_id: &str, template_id: &str, room_id: &str) {
-        tracing::info!("=== spawn_d::on_npc_died called ===");
-        tracing::info!("npc_id={}, template_id={}, room_id={}", npc_id, template_id, room_id);
+    /// 处理NPC死亡 (内部方法，由npc_died调用)
+    /// 注意：这个方法只处理spawn_d内部的逻辑，不调用destruct避免死锁
+    pub async fn on_npc_died_internal(&mut self, npc_id: &str, template_id: &str, room_id: &str) {
+        tracing::info!("spawn_d::on_npc_died_internal: npc_id={}, template_id={}, room_id={}",
+            npc_id, template_id, room_id);
 
-        // 1. 从刷新点移除
-        tracing::info!("Step 1: Removing NPC from spawn point...");
+        // 从刷新点移除
         self.remove_npc_from_spawn_point(room_id, template_id, npc_id);
 
-        // 2. 从世界中销毁NPC
-        tracing::info!("Step 2: Calling destruct to remove NPC from world...");
-        destruct(npc_id).await;
-        tracing::info!("Step 2: Destruct completed");
-
-        // 3. 安排刷新
+        // 安排刷新
         let now = chrono::Utc::now().timestamp();
-        tracing::info!("Step 3: Scheduling respawn at {} (30 seconds from now)", now + 30);
         self.add_pending_respawn(room_id, template_id, now);
-        tracing::info!("=== spawn_d::on_npc_died completed ===");
+
+        tracing::info!("spawn_d::on_npc_died_internal completed");
     }
 
     /// 从刷新点移除NPC
@@ -663,7 +658,26 @@ pub fn get_spawnd() -> &'static TokioRwLock<SpawnDaemon> {
 ///
 /// 当NPC被杀死时调用此函数，NPC会从房间消失，30秒后刷新
 pub async fn npc_died(npc_id: &str, template_id: &str, room_id: &str) {
-    let daemon = get_spawnd();
-    let mut daemon = daemon.write().await;
-    daemon.on_npc_died(npc_id, template_id, room_id).await;
+    use crate::gamenv::efuns::destruct;
+
+    tracing::info!("=== spawn_d::npc_died called ===");
+    tracing::info!("npc_id={}, template_id={}, room_id={}", npc_id, template_id, room_id);
+
+    // 1. 先从刷新点移除（需要spawn_d锁）
+    {
+        let mut daemon = get_spawnd().write().await;
+        daemon.remove_npc_from_spawn_point(room_id, template_id, npc_id);
+        // 安排刷新
+        let now = chrono::Utc::now().timestamp();
+        daemon.add_pending_respawn(room_id, template_id, now);
+        drop(daemon); // 释放锁
+    }
+
+    tracing::info!("Step 1-2: Removed from spawn point and scheduled respawn");
+
+    // 2. 从世界中销毁NPC（需要world锁，确保先释放spawn_d锁避免死锁）
+    destruct(npc_id).await;
+
+    tracing::info!("Step 3: Destruct completed");
+    tracing::info!("=== spawn_d::npc_died completed ===");
 }
