@@ -78,18 +78,28 @@ impl Character {
 
     /// 获取战斗属性（用于PK战斗）
     pub fn to_combat_stats(&self) -> crate::gamenv::single::daemons::pkd::CombatStats {
+        use crate::gamenv::single::daemons::pkd::PkMode;
         crate::gamenv::single::daemons::pkd::CombatStats {
             id: self.id.clone(),
             name: self.name.clone(),
             name_cn: self.name_cn.clone(),
-            level: self.level,
+            level: self.level as i32,
             hp: self.hp,
             hp_max: self.hp_max,
+            mp: 0,  // Character doesn't have mp, use default
+            mp_max: 0,
+            jing: self.qi,  // Use qi for jing as fallback
+            jing_max: self.qi_max,
             qi: self.qi,
             qi_max: self.qi_max,
             attack: self.attack,
             defense: self.defense,
-            speed: self.speed,
+            dodge: self.speed,
+            parry: self.defense / 2,  // Use half defense as parry
+            pk_mode: PkMode::Peace,
+            pk_value: 0,
+            kill_streak: 0,
+            is_killing: false,
         }
     }
 

@@ -5,7 +5,7 @@ use serde_json::Value as JsonValue;
 
 /// MUD颜色代码映射
 /// 对应 txpike9 中的颜色系统
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MudColor {
     /// 黑色 - §N (实际上是不带颜色)
     Black,

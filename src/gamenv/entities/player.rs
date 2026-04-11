@@ -95,7 +95,7 @@ impl Inventory for Player {
     }
 
     async fn remove_item(&mut self, item_id: &str) -> Result<Item, String> {
-        if let Some(pos) = self.items.iter().position(|i| &i.id == item_id) {
+        if let Some(pos) = self.items.iter().position(|i| i.id.to_string() == item_id) {
             Ok(self.items.remove(pos))
         } else {
             Err("物品不存在".to_string())
@@ -103,7 +103,7 @@ impl Inventory for Player {
     }
 
     fn get_item(&self, item_id: &str) -> Option<&Item> {
-        self.items.iter().find(|i| &i.id == item_id)
+        self.items.iter().find(|i| i.id.to_string() == item_id)
     }
 
     fn max_encumbrance(&self) -> i32 {
@@ -117,11 +117,11 @@ impl Skills for Player {
         &self.skills_map
     }
 
-    async fn learn_skill(&mut self, skill_id: String) -> Result<(), String> {
-        if self.skills_map.contains_key(&skill_id) {
+    async fn learn_skill(&mut self, skill_id: &str) -> Result<(), String> {
+        if self.skills_map.contains_key(skill_id) {
             return Err("你已经学会了这个技能".to_string());
         }
-        self.skills_map.insert(skill_id, 1);
+        self.skills_map.insert(skill_id.to_string(), 1);
         Ok(())
     }
 

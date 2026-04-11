@@ -81,7 +81,7 @@ impl Room {
         }
 
         let names: Vec<String> = self.exits.keys()
-            .map(|d| direction_name_cn(d))
+            .map(|d| direction_name_cn(d).to_string())
             .collect();
 
         names.join(" ")

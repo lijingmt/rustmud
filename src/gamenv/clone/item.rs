@@ -3,7 +3,9 @@
 //
 // 物品模板用于创建可克隆的物品实例
 
-use crate::gamenv::item::{Item, ItemType, WeaponType};
+use crate::gamenv::item::{Item, ItemType, ItemQuality};
+use crate::gamenv::item::weapon::WeaponType;
+use crate::core::ObjectId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,6 +113,12 @@ impl ItemTemplate {
         self
     }
 
+    /// 设置单位
+    pub fn with_unit(mut self, unit: &str) -> Self {
+        self.unit = unit.to_string();
+        self
+    }
+
     /// 设置自动加载
     pub fn with_autoload(mut self, autoload: bool) -> Self {
         self.autoload = autoload;
@@ -119,18 +127,26 @@ impl ItemTemplate {
 
     /// 从模板创建物品实例
     pub fn instantiate(&self) -> Item {
+        // 将 HashMap 转换为 serde_json::Value::Object
+        let extra_data_value = serde_json::json!(self.extra_data);
+
         Item {
-            id: format!("{}_{}", self.id, chrono::Utc::now().timestamp_millis()),
+            id: ObjectId::new(),
+            template_id: self.id.clone(),
             name: self.name.clone(),
             name_cn: self.name_cn.clone(),
-            description: self.description.clone(),
-            unit: self.unit.clone(),
+            desc: self.description.clone(),
             item_type: self.item_type.clone(),
+            quality: ItemQuality::from_level(self.level),
             level: self.level,
-            value: self.value,
-            weight: self.weight,
-            picture: self.picture.clone(),
-            extra_data: self.extra_data.clone(),
+            quantity: 1,
+            max_stack: 1,
+            tradable: true,
+            droppable: true,
+            bound_to: None,
+            created_at: chrono::Utc::now().timestamp(),
+            expire_at: 0,
+            extra_data: extra_data_value,
         }
     }
 }
@@ -235,7 +251,7 @@ pub async fn init_item_templates() {
         "consumable/basic_pill".to_string(),
         "basic_pill".to_string(),
         "小还丹".to_string(),
-        ItemType::Consumable,
+        ItemType::Medicine,
     )
     .with_description("一颗散发着药香的小丹药，可恢复50点生命。\\n")
     .with_level(1)

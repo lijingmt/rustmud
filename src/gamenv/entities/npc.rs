@@ -3,6 +3,7 @@
 // 使用trait组合: Character + Fight + Equip + Talkable
 
 use crate::gamenv::traits::{Fight, Equip, EquipSlot, Talkable};
+use serde::{Deserialize, Serialize};
 
 /// NPC实体
 pub struct Npc {
@@ -19,7 +20,7 @@ pub struct Npc {
 }
 
 /// 对话选项
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DialogueOption {
     pub topic: String,
     pub response: String,
