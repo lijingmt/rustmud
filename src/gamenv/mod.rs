@@ -24,6 +24,7 @@ pub mod world;
 pub mod player_state;
 pub mod single;
 pub mod hidden_cmd;
+pub mod traits;
 
 pub use master::*;
 pub use user::*;
