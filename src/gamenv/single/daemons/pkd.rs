@@ -1153,6 +1153,10 @@ impl PkDaemon {
         use crate::gamenv::single::daemons::runtime_npc_d::get_runtime_npc_d;
         use crate::gamenv::single::daemons::spawn_d::npc_died;
 
+        tracing::info!("=== handle_npc_death called ===");
+        tracing::info!("Challenger: {} (alive: {})", battle.challenger.id, battle.challenger.is_alive());
+        tracing::info!("Defender: {} (alive: {})", battle.defender.id, battle.defender.is_alive());
+
         // 检查防守者是否是NPC（ID格式为 room_id/npc_id）
         let defender_id = &battle.defender.id;
         let challenger_id = &battle.challenger.id;
@@ -1163,8 +1167,11 @@ impl PkDaemon {
         } else if challenger_id.contains('/') {
             (challenger_id, !battle.challenger.is_alive(), false)
         } else {
+            tracing::info!("Both are players, skipping NPC death handling");
             return; // 双方都是玩家，不需要处理
         };
+
+        tracing::info!("NPC identified: npc_id={}, killed={}, is_defender={}", npc_id, killed, is_defender);
 
         if killed {
             // 解析房间ID（NPC ID的第一部分是房间）
@@ -1185,7 +1192,12 @@ impl PkDaemon {
 
             // *** 关键: 调用spawn_d的npc_died，实现30秒刷新 ***
             // 这会从世界中移除NPC，并在30秒后刷新
+            tracing::info!("Calling spawn_d::npc_died with npc_id={}, template_id={}, room_id={}",
+                npc_id, template_id, room_id);
             npc_died(&template_id, &template_id, room_id).await;
+            tracing::info!("spawn_d::npc_died returned");
+        } else {
+            tracing::info!("NPC was not killed (survived the battle)");
         }
     }
 

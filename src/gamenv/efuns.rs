@@ -236,10 +236,41 @@ pub async fn present(obj_id: &str, container_id: &str) -> bool {
 /// 销毁对象
 ///
 /// 对应 txpike9: destruct()
+/// 这会从环境中移除对象，并从房间的NPC列表中移除（如果是NPC）
 pub async fn destruct(obj_id: &str) {
-    let state = get_world_state().await;
-    let mut state = state.write().await;
-    state.destruct(obj_id);
+    tracing::info!("destruct() called for obj_id={}", obj_id);
+
+    // 首先获取对象所在环境
+    let env_id = {
+        let state = get_world_state().await;
+        let state = state.read().await;
+        state.environment(obj_id).map(|s| s.to_string())
+    };
+
+    // 从世界状态中移除对象
+    {
+        let state = get_world_state().await;
+        let mut state = state.write().await;
+        state.destruct(obj_id);
+    }
+
+    // 如果对象在房间中，还需要从房间的NPC列表中移除
+    if let Some(room_id) = env_id {
+        use crate::gamenv::world::get_world;
+        let world = get_world();
+
+        // 检查是否是NPC (ID包含/的通常是房间NPC)
+        if obj_id.contains('/') {
+            tracing::info!("Removing NPC {} from room {}", obj_id, room_id);
+            let mut world = world.write().await;
+            if let Some(room) = world.rooms.get_mut(&room_id) {
+                room.npcs.retain(|id| id != obj_id);
+                tracing::info!("NPC {} removed from room.npcs, remaining: {}", obj_id, room.npcs.len());
+            }
+        }
+    }
+
+    tracing::info!("destruct() completed for obj_id={}", obj_id);
 }
 
 /// 注册对象到世界状态

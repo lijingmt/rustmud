@@ -421,17 +421,23 @@ impl SpawnDaemon {
 
     /// 处理NPC死亡 (对外接口)
     pub async fn on_npc_died(&mut self, npc_id: &str, template_id: &str, room_id: &str) {
-        tracing::info!("NPC died: {} (template: {}, room: {})", npc_id, template_id, room_id);
+        tracing::info!("=== spawn_d::on_npc_died called ===");
+        tracing::info!("npc_id={}, template_id={}, room_id={}", npc_id, template_id, room_id);
 
         // 1. 从刷新点移除
+        tracing::info!("Step 1: Removing NPC from spawn point...");
         self.remove_npc_from_spawn_point(room_id, template_id, npc_id);
 
         // 2. 从世界中销毁NPC
+        tracing::info!("Step 2: Calling destruct to remove NPC from world...");
         destruct(npc_id).await;
+        tracing::info!("Step 2: Destruct completed");
 
         // 3. 安排刷新
         let now = chrono::Utc::now().timestamp();
+        tracing::info!("Step 3: Scheduling respawn at {} (30 seconds from now)", now + 30);
         self.add_pending_respawn(room_id, template_id, now);
+        tracing::info!("=== spawn_d::on_npc_died completed ===");
     }
 
     /// 从刷新点移除NPC
@@ -460,13 +466,19 @@ impl SpawnDaemon {
     pub async fn process_respawns(&mut self) {
         let now = chrono::Utc::now().timestamp();
 
-        for (_room_id, spawns) in self.npc_spawn_points.iter_mut() {
+        for (room_id, spawns) in self.npc_spawn_points.iter_mut() {
             for spawn in spawns.iter_mut() {
                 let respawn_time = spawn.respawn_time as i64;
                 let can_spawn = spawn.can_spawn();
                 let mut still_pending = Vec::new();
 
                 // 先把待刷新列表取出来，避免借用问题
+                let pending_count = spawn.pending_respawns.len();
+                if pending_count > 0 {
+                    tracing::debug!("Processing {} pending respawns for room {} (template: {})",
+                        pending_count, room_id, spawn.template_id);
+                }
+
                 let pending: Vec<_> = spawn.pending_respawns.drain(..).collect();
 
                 for (death_time, template_id, room_id) in pending {
@@ -474,6 +486,7 @@ impl SpawnDaemon {
 
                     if elapsed >= respawn_time {
                         if can_spawn {
+                            tracing::info!("Respawning NPC: template={}, room={}", template_id, room_id);
                             // 执行刷新
                             if let Some(npc) = create_npc_from_template(&template_id).await {
                                 let new_npc_id = npc.character.id.clone();
@@ -496,14 +509,18 @@ impl SpawnDaemon {
                                 );
                             } else {
                                 // 刷新失败，继续等待
+                                tracing::warn!("Failed to respawn NPC: template={}", template_id);
                                 still_pending.push((death_time, template_id, room_id));
                             }
                         } else {
                             // 已达最大数量，继续等待
+                            tracing::debug!("Cannot respawn NPC yet: max_count reached for template={}", template_id);
                             still_pending.push((death_time, template_id, room_id));
                         }
                     } else {
                         // 还没到刷新时间
+                        let remaining = respawn_time - elapsed;
+                        tracing::debug!("NPC waiting to respawn: template={}, remaining={}s", template_id, remaining);
                         still_pending.push((death_time, template_id, room_id));
                     }
                 }
@@ -574,8 +591,6 @@ impl SpawnDaemon {
 
     /// 启动刷新任务
     pub async fn start_spawn_task(&mut self, world: Arc<TokioRwLock<GameWorld>>) {
-        let daemon = Arc::new(TokioRwLock::new(self.clone_ref()));
-
         // 每秒检查一次NPC刷新，每分钟检查Boss
         let mut interval = interval(Duration::from_secs(1));
         let mut boss_counter = 0;
@@ -584,25 +599,31 @@ impl SpawnDaemon {
             interval.tick().await;
             boss_counter += 1;
 
-            let mut daemon_guard = daemon.write().await;
+            // 只在需要时获取锁，避免死锁
+            tracing::debug!("Spawn daemon tick: processing respawns...");
 
-            // 每秒都处理NPC刷新
-            daemon_guard.process_respawns().await;
+            // 每秒都处理NPC刷新 - 使用独立的锁范围
+            {
+                let mut daemon = get_spawnd().write().await;
+                daemon.process_respawns().await;
+                drop(daemon); // 显式释放锁
+            }
 
             // 每分钟检查一次Boss刷新
             if boss_counter >= 60 {
                 boss_counter = 0;
+
                 let world_guard = world.read().await;
+                let mut daemon = get_spawnd().write().await;
 
                 // 清理过期NPC
-                daemon_guard.cleanup_expired();
+                daemon.cleanup_expired();
 
                 // 检查每个Boss配置
-                for config in daemon_guard.boss_configs.clone() {
-                    if daemon_guard.can_spawn(&config) {
-                        if let Some(spawned) = daemon_guard.spawn_boss(&config, &world_guard) {
-                            let broadcast = daemon_guard.format_broadcast(&config, &spawned.zone);
-                            // 这里应该广播给所有在线玩家
+                for config in daemon.boss_configs.clone() {
+                    if daemon.can_spawn(&config) {
+                        if let Some(spawned) = daemon.spawn_boss(&config, &world_guard) {
+                            let broadcast = daemon.format_broadcast(&config, &spawned.zone);
                             log::info!("Boss spawned: {} in {}", config.name, spawned.zone.as_str());
                             log::info!("Broadcast: {}", broadcast);
                         }
