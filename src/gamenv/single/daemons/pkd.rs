@@ -819,15 +819,8 @@ impl PkBattle {
             None => return "你不在战斗中！".to_string(),
         };
 
-        // 操作按钮 - 放在最上面方便操作
-        output.push_str(&format!("§H操作§N\n"));
-
-        // 技能列表按钮 - 移除按钮内的颜色代码，避免解析问题
-        output.push_str("[查看技能:skills]\n");
-        output.push_str("[继续战斗:pk continue]\n");
-        output.push_str("[逃跑:escape]\n");
-        output.push_str("[投降:surrender]\n");
-        output.push_str("\n");
+        // 操作按钮 - 放在同一行
+        output.push_str(&format!("§H操作§N [查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n"));
 
         // 显示已选择的技能（如果有）
         if let Some(ref pending_skill_id) = self.pending_skills.get(player_id) {
@@ -899,15 +892,8 @@ impl PkBattle {
             None => return "你不在战斗中！".to_string(),
         };
 
-        // 操作按钮 - 放在最上面方便操作
-        output.push_str(&format!("§H操作§N\n"));
-
-        // 技能列表按钮 - 移除按钮内的颜色代码，避免解析问题
-        output.push_str("[查看技能:skills]\n");
-        output.push_str("[继续战斗:pk continue]\n");
-        output.push_str("[逃跑:escape]\n");
-        output.push_str("[投降:surrender]\n");
-        output.push_str("\n");
+        // 操作按钮 - 放在同一行
+        output.push_str(&format!("§H操作§N [查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n"));
 
         // 战斗日志 - 放在操作按钮下面
         if !combat_log.is_empty() {
