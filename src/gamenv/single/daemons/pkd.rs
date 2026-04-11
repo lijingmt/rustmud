@@ -820,7 +820,7 @@ impl PkBattle {
         };
 
         // 操作按钮 - 放在同一行
-        output.push_str(&format!("§H操作§N [查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n"));
+        output.push_str("[查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n");
 
         // 显示已选择的技能（如果有）
         if let Some(ref pending_skill_id) = self.pending_skills.get(player_id) {
@@ -893,7 +893,7 @@ impl PkBattle {
         };
 
         // 操作按钮 - 放在同一行
-        output.push_str(&format!("§H操作§N [查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n"));
+        output.push_str("[查看技能:skills] [继续战斗:pk continue] [逃跑:escape] [投降:surrender]\n\n");
 
         // 战斗日志 - 放在操作按钮下面
         if !combat_log.is_empty() {
