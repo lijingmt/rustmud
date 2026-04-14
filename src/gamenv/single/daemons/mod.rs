@@ -2,6 +2,7 @@
 // 对应 txpike9/gamenv/single/daemons/
 
 pub mod userd;
+pub mod userd_v2;
 pub mod toptend;
 pub mod itemd;
 pub mod crond;

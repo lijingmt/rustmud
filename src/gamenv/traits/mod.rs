@@ -10,6 +10,7 @@ pub mod equip;
 pub mod movable;
 pub mod talkable;
 pub mod entity;
+pub mod daemon;
 
 pub use composition::*;
 pub use fight::*;
@@ -19,3 +20,4 @@ pub use equip::*;
 pub use movable::*;
 pub use talkable::*;
 pub use entity::*;
+pub use daemon::*;
