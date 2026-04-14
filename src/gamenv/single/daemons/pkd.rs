@@ -1019,11 +1019,11 @@ impl PkBattle {
                         String::new()
                     };
 
-                    // 显示技能按钮 - 使用英文名（便于维护）
+                    // 显示技能按钮 - 使用中文名称
                     if is_ready && can_afford {
                         output.push_str(&format!(
-                            "[{}:cast {}]\n",
-                            skill_id, skill_id
+                            "§Y[{}:cast {}]§N\n",
+                            skill.name_cn, skill_id
                         ));
                     } else {
                         output.push_str(&format!(
