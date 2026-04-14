@@ -137,6 +137,8 @@ pub async fn init_registry() -> Arc<RwLock<CommandRegistry>> {
 }
 
 /// 辅助宏：创建带元数据的命令
+///
+/// 使用 async_trait 和 Lazy 初始化，简化命令定义
 #[macro_export]
 macro_rules! command {
     (
@@ -153,21 +155,20 @@ macro_rules! command {
 
             #[async_trait::async_trait]
             impl $crate::gamenv::core::command::CommandHandler for CommandImpl {
-                fn handle(
+                async fn handle(
                     &self,
                     $ctx: $crate::gamenv::core::command::CommandContext,
-                ) -> Pin<Box<dyn Future<Output = $crate::gamenv::core::command::CommandResult> + Send + '_>>
-                {
-                    Box::pin(async move {
-                        $body
-                    })
+                ) -> $crate::gamenv::core::command::CommandResult {
+                    $body
                 }
 
                 fn metadata(&self) -> &$crate::gamenv::core::command::CommandMetadata {
-                    static META: $crate::gamenv::core::command::CommandMetadata =
+                    use once_cell::sync::Lazy;
+                    static META: Lazy<$crate::gamenv::core::command::CommandMetadata> = Lazy::new(|| {
                         $crate::gamenv::core::command::CommandMetadata::new($name, $desc, $category)
                             .with_aliases(&[$($alias),*])
-                            .with_args($min, $max);
+                            .with_args($min, $max)
+                    });
                     &META
                 }
             }
