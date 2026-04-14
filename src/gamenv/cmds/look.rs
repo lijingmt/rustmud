@@ -1,7 +1,13 @@
 // gamenv/cmds/look.rs - look命令
 // 对应 txpike9/wapmud2/cmds/look.pike
 
+use std::sync::Arc;
+use async_trait::async_trait;
+use tokio::sync::RwLock as TokioRwLock;
+
 use crate::gamenv::world::GameWorld;
+use crate::gamenv::core::command::*;
+use crate::gamenv::player_state;
 
 /// 查看房间命令
 pub async fn look_command(world: &GameWorld, room_id: &str) -> String {
@@ -127,4 +133,46 @@ pub async fn look_npc_command(world: &GameWorld, room_id: &str, target: &str) ->
     } else {
         "这里没有这个目标。\n".to_string()
     }
+}
+
+/// Look 命令处理器（新命令系统）
+pub struct LookCommand;
+
+/// 辅助函数：使用 RwLockReadGuard 调用 look_command
+async fn look_with_guard(world_guard: &TokioRwLock<GameWorld>, room_id: &str, args: &[String]) -> String {
+    let world = world_guard.read().await;
+    if args.is_empty() {
+        look_command(&world, room_id).await
+    } else {
+        let target = args.join(" ");
+        look_npc_command(&world, room_id, &target).await
+    }
+}
+
+#[async_trait]
+impl CommandHandler for LookCommand {
+    async fn handle(&self, ctx: CommandContext) -> CommandResult {
+        let world_ref = crate::gamenv::world::get_world();
+        let output = look_with_guard(&world_ref, &ctx.room_id, &ctx.args).await;
+        CommandResult::from(output)
+    }
+
+    fn metadata(&self) -> &CommandMetadata {
+        static META: once_cell::sync::Lazy<CommandMetadata> =
+            once_cell::sync::Lazy::new(|| {
+                CommandMetadata::new(
+                    "look",
+                    "查看周围环境或指定目标",
+                    CommandCategory::Info
+                )
+                .with_aliases(&["l"])
+                .with_args(0, None)
+            });
+        &META
+    }
+}
+
+/// 获取 Look 命令实例
+pub fn get_command() -> Arc<dyn CommandHandler> {
+    Arc::new(LookCommand) as Arc<dyn CommandHandler>
 }

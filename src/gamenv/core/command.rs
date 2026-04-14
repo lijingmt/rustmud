@@ -1,8 +1,7 @@
 // gamenv/core/command.rs - 命令抽象
 // 所有命令处理的基础接口
 
-use std::pin::Pin;
-use std::future::Future;
+use async_trait::async_trait;
 
 /// 命令执行上下文
 #[derive(Clone, Debug)]
@@ -108,10 +107,11 @@ pub enum ChatChannel {
     System,
 }
 
-/// 命令处理器trait
+/// 命令处理器trait - 使用 async_trait 支持 async fn
+#[async_trait]
 pub trait CommandHandler: Send + Sync {
-    /// 处理命令
-    fn handle(&self, ctx: CommandContext) -> Pin<Box<dyn Future<Output = CommandResult> + Send + '_>>;
+    /// 处理命令（async 方法）
+    async fn handle(&self, ctx: CommandContext) -> CommandResult;
 
     /// 获取命令元数据
     fn metadata(&self) -> &CommandMetadata;
@@ -228,13 +228,13 @@ macro_rules! simple_command {
     ($name:expr, $desc:expr, $category:expr, $handler:expr) => {{
         struct SimpleCommand;
 
+        #[async_trait::async_trait]
         impl $crate::gamenv::core::command::CommandHandler for SimpleCommand {
-            fn handle(
+            async fn handle(
                 &self,
                 ctx: $crate::gamenv::core::command::CommandContext,
-            ) -> Pin<Box<dyn Future<Output = $crate::gamenv::core::command::CommandResult> + Send + '_>>
-            {
-                Box::pin(async move { $handler(ctx).await })
+            ) -> $crate::gamenv::core::command::CommandResult {
+                $handler(ctx).await
             }
 
             fn metadata(&self) -> &$crate::gamenv::core::command::CommandMetadata {
