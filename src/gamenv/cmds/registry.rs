@@ -129,6 +129,7 @@ pub async fn init_registry() -> Arc<RwLock<CommandRegistry>> {
         crate::gamenv::cmds::look::get_command(),
         crate::gamenv::cmds::inventory::get_command(),
         crate::gamenv::cmds::skills::get_command(),
+        crate::gamenv::cmds::skills::get_cast_command(),
         crate::gamenv::cmds::pk::get_command(),
         crate::gamenv::cmds::move_dir::get_command(),
     ]);

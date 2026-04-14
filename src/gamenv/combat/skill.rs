@@ -325,6 +325,54 @@ pub fn create_preset_skills() -> Vec<Skill> {
         .with_required_level(1)
         .with_description("最基础的攻击技能。".to_string()),
 
+        // 武堂 - 猛虎拳
+        Skill::new(
+            "skill_xionghuquan".to_string(),
+            "猛虎拳".to_string(),
+            SkillType::ActiveAttack,
+        )
+        .with_effects(vec![SkillEffect::Damage(1.3)])
+        .with_qi_cost(15)
+        .with_cooldown(2)
+        .with_required_level(10)
+        .with_description("武堂入门拳法，刚猛如虎，气势磅礴。".to_string()),
+
+        // 武当 - 太极剑
+        Skill::new(
+            "skill_taiji".to_string(),
+            "太极剑".to_string(),
+            SkillType::ActiveAttack,
+        )
+        .with_effects(vec![SkillEffect::Damage(1.2)])
+        .with_qi_cost(10)
+        .with_cooldown(2)
+        .with_required_level(10)
+        .with_description("武当镇派剑法，以柔克刚，四两拨千斤。".to_string()),
+
+        // 少林 - 罗汉拳
+        Skill::new(
+            "skill_luohanquan".to_string(),
+            "罗汉拳".to_string(),
+            SkillType::ActiveAttack,
+        )
+        .with_effects(vec![SkillEffect::Damage(1.25)])
+        .with_qi_cost(15)
+        .with_cooldown(2)
+        .with_required_level(10)
+        .with_description("少林七十二绝技之一，刚猛有力，威震八方。".to_string()),
+
+        // 华山 - 独孤九剑
+        Skill::new(
+            "skill_dugujiujian".to_string(),
+            "独孤九剑".to_string(),
+            SkillType::ActiveAttack,
+        )
+        .with_effects(vec![SkillEffect::Damage(1.5)])
+        .with_qi_cost(30)
+        .with_cooldown(3)
+        .with_required_level(20)
+        .with_description("华山派镇派绝学，专破天下武学，无招胜有招。".to_string()),
+
         Skill::new(
             "skill_power_strike".to_string(),
             "强力一击".to_string(),
