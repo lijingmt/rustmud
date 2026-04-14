@@ -145,6 +145,58 @@
             </div>
         </main>
 
+        <!-- 移动端优化战斗界面 -->
+        <div class="mobile-battle-container" v-if="isInBattle && !showLogin">
+            <!-- 战斗状态栏 -->
+            <div class="battle-status-bar">
+                <div class="battle-combatant player">
+                    <div class="combatant-avatar">👤</div>
+                    <div class="combatant-info">
+                        <div class="combatant-name">{{ state.player?.name || '玩家' }}</div>
+                        <div class="combatant-hp-bar">
+                            <div class="hp-fill player-hp" :style="{width: (state.player?.hpPercent || 0) + '%'}"></div>
+                        </div>
+                        <div class="combatant-hp-text">{{ state.player?.hp || 0 }}/{{ state.player?.hpMax || 0 }}</div>
+                    </div>
+                </div>
+                <div class="battle-vs-large">⚔️</div>
+                <div class="battle-combatant enemy">
+                    <div class="combatant-info">
+                        <div class="combatant-name">{{ battleEnemy?.name || '敌人' }}</div>
+                        <div class="combatant-hp-bar">
+                            <div class="hp-fill enemy-hp" :style="{width: ((battleEnemy?.hp || 0) / (battleEnemy?.hpMax || 1) * 100) + '%'}"></div>
+                        </div>
+                        <div class="combatant-hp-text">{{ battleEnemy?.hp || 0 }}/{{ battleEnemy?.hpMax || '?' }}</div>
+                    </div>
+                    <div class="combatant-avatar">👹</div>
+                </div>
+            </div>
+
+            <!-- 主操作按钮区 -->
+            <div class="battle-main-actions">
+                <button class="battle-action-btn primary-btn" @click="sendCommand('attack')">
+                    <span class="btn-icon">⚔️</span>
+                    <span class="btn-text">攻击</span>
+                </button>
+                <button class="battle-action-btn skill-btn" @click="sendCommand('use_skill')">
+                    <span class="btn-icon">🎯</span>
+                    <span class="btn-text">武功</span>
+                </button>
+                <button class="battle-action-btn item-btn" @click="sendCommand('use 小生命药水')">
+                    <span class="btn-icon">💊</span>
+                    <span class="btn-text">吃药</span>
+                </button>
+            </div>
+
+            <!-- 次要操作区 -->
+            <div class="battle-secondary-actions">
+                <button class="battle-action-btn secondary-btn" @click="sendCommand('battle_status')">📊 战况</button>
+                <button class="battle-action-btn secondary-btn" @click="sendCommand('special_attack')">💥 特攻</button>
+                <button class="battle-action-btn secondary-btn warning-btn" @click="sendCommand('escape')">🏃 逃跑</button>
+                <button class="battle-action-btn secondary-btn danger-btn" @click="sendCommand('surrender')">🏳️ 投降</button>
+            </div>
+        </div>
+
         <!-- 战斗面板 - 迷你模式 -->
         <div class="battle-panel mini-mode" v-if="isInBattle && !showLogin">
             <div class="battle-mini">
