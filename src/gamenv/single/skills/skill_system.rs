@@ -78,113 +78,143 @@ impl BasicSkillType {
 }
 
 /// 技能熟练度曲线 - 对应 txpike9 的衰减机制
+/// txpike9 公式: need = (level + 1) * (level + 1)
+/// 熟练度百分比: int(100 * points / ((level + 1) * (level + 1)))
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ProficiencyCurve {
     /// 初始等级
     pub initial: i32,
-    /// 衰减系数
-    pub attenuation: i32,
     /// 最大等级
     pub max_level: i32,
 }
 
 impl ProficiencyCurve {
     /// 创建默认熟练度曲线
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         Self {
-            initial: 10,
-            attenuation: 100,
-            max_level: 200,
+            initial: 0,
+            max_level: 500,
         }
     }
 
-    /// 计算当前等级所需经验
-    pub fn exp_for_level(&self, level: i32) -> i64 {
-        if level <= self.initial {
+    /// 计算升级到下一级所需经验
+    /// txpike9: need = (level + 1) * (level + 1)
+    pub fn exp_for_next_level(&self, level: i32) -> i64 {
+        let next_level = level + 1;
+        (next_level * next_level) as i64
+    }
+
+    /// 计算当前熟练度百分比
+    /// txpike9: int(100 * points / ((level + 1) * (level + 1)))
+    pub fn proficiency_percent(&self, level: i32, points: i64) -> i32 {
+        let needed = self.exp_for_next_level(level);
+        if needed == 0 {
             return 0;
         }
-
-        // txpike9 风格的衰减公式
-        let diff = level - self.initial;
-        let attenuation = self.attenuation as f64;
-
-        // 经验公式: base * (level^2 / attenuation)
-        ((diff * diff * 100) as f64 / attenuation) as i64
+        ((points * 100) / needed) as i32
     }
 
-    /// 根据经验计算等级
-    pub fn level_from_exp(&self, exp: i64) -> i32 {
-        if exp == 0 {
-            return self.initial;
+    /// 根据点数计算等级
+    pub fn level_from_points(&self, mut points: i64) -> i32 {
+        let mut level = self.initial;
+        while level < self.max_level {
+            let needed = self.exp_for_next_level(level);
+            if points < needed {
+                break;
+            }
+            points -= needed;
+            level += 1;
         }
-
-        let attenuation = self.attenuation as f64;
-        let exp_f = exp as f64;
-
-        // 反向计算: level = sqrt(exp * attenuation / 100) + initial
-        let level = (exp_f * attenuation / 100.0).sqrt() as i32 + self.initial;
-
-        level.min(self.max_level)
+        level
     }
 
     /// 计算当前等级的加成百分比
+    /// txpike9 有效等级 = basic/2 + special (如果有enable)
     pub fn bonus_percent(&self, level: i32) -> f32 {
         if level >= self.max_level {
             return 2.0; // 200% 加成
         }
+        // 每级约 0.2% 加成，最高 100% at level 500
+        (level as f32 / 500.0).min(1.0)
+    }
+}
 
-        // 渐进式加成: 50% + 1.5% * level
-        (50 + (level * 3 / 2)) as f32 / 100.0
+impl Default for ProficiencyCurve {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 /// 玩家技能数据 - 对应 txpike9 的 skills mapping
+/// txpike9: mapping(string:array) skills = ([]);
+/// Each skill: [skill_name:({skill_level, skill_point})]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PlayerSkillData {
-    /// 技能等级
+    /// 技能等级 (对应 txpike9 的 skills[skill][0])
     pub level: i32,
-    /// 技能点数 (熟练度)
+    /// 技能点数/熟练度 (对应 txpike9 的 skills[skill][1])
     pub points: i64,
     /// 使用次数
     pub use_count: u64,
     /// 已学会的招式列表
     pub learned_performs: Vec<String>,
-    /// 是否启用 (enable mapping for special skills)
-    pub enabled: bool,
 }
 
 impl PlayerSkillData {
-    /// 创建新技能数据
-    pub fn new(initial_level: i32) -> Self {
+    /// 创建新技能数据 - 从0级开始
+    pub fn new() -> Self {
         Self {
-            level: initial_level,
+            level: 0,
             points: 0,
             use_count: 0,
             learned_performs: Vec::new(),
-            enabled: true,
         }
     }
 
-    /// 增加经验
-    pub fn add_exp(&mut self, exp: i64, curve: &ProficiencyCurve) -> bool {
-        self.points += exp;
-        let new_level = curve.level_from_exp(self.points);
-
-        if new_level > self.level {
-            self.level = new_level;
-            true
-        } else {
-            false
+    /// 从等级创建
+    pub fn with_level(level: i32) -> Self {
+        Self {
+            level,
+            points: 0,
+            use_count: 0,
+            learned_performs: Vec::new(),
         }
+    }
+
+    /// 增加经验点数 - txpike9 improve_skill 函数
+    /// 返回是否升级
+    pub fn add_points(&mut self, points: i64) -> bool {
+        self.points += points;
+        let mut leveled_up = false;
+
+        // 检查是否升级: need = (level + 1) * (level + 1)
+        loop {
+            let needed = ((self.level + 1) * (self.level + 1)) as i64;
+            if self.points >= needed {
+                self.points -= needed;
+                self.level += 1;
+                leveled_up = true;
+            } else {
+                break;
+            }
+        }
+
+        leveled_up
+    }
+
+    /// 获取熟练度百分比 - txpike9显示用
+    /// int(100 * points / ((level + 1) * (level + 1)))
+    pub fn proficiency_percent(&self) -> i32 {
+        let needed = ((self.level + 1) * (self.level + 1)) as i64;
+        if needed == 0 {
+            return 0;
+        }
+        ((self.points * 100) / needed) as i32
     }
 
     /// 记录使用
     pub fn record_use(&mut self) {
         self.use_count += 1;
-        // 每10次使用获得1点熟练度
-        if self.use_count % 10 == 0 {
-            self.points += 1;
-        }
     }
 
     /// 学习招式
@@ -201,10 +231,11 @@ impl PlayerSkillData {
     pub fn has_perform(&self, perform_id: &str) -> bool {
         self.learned_performs.iter().any(|p| p == perform_id)
     }
+}
 
-    /// 获取技能加成
-    pub fn get_bonus(&self, curve: &ProficiencyCurve) -> f32 {
-        curve.bonus_percent(self.level)
+impl Default for PlayerSkillData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -445,12 +476,8 @@ impl EnhancedSkillManager {
                 category: SkillCategory::Special,
                 basic_type: Some(BasicSkillType::Unarmed),
                 school: "武堂".to_string(),
-                curve: ProficiencyCurve {
-                    initial: 10,
-                    attenuation: 80,
-                    max_level: 150,
-                },
-                prerequisites: vec!["skill_unarmed_basic".to_string()],
+                curve: ProficiencyCurve::new(),
+                prerequisites: vec![],
                 stat_requirements: StatRequirements {
                     gen: Some(20),
                     str: Some(25),
@@ -479,12 +506,8 @@ impl EnhancedSkillManager {
                 category: SkillCategory::Special,
                 basic_type: Some(BasicSkillType::Sword),
                 school: "武当".to_string(),
-                curve: ProficiencyCurve {
-                    initial: 10,
-                    attenuation: 90,
-                    max_level: 180,
-                },
-                prerequisites: vec!["skill_unarmed_basic".to_string()],
+                curve: ProficiencyCurve::new(),
+                prerequisites: vec![],
                 stat_requirements: StatRequirements {
                     gen: Some(30),
                     str: Some(15),
@@ -513,12 +536,8 @@ impl EnhancedSkillManager {
                 category: SkillCategory::Special,
                 basic_type: Some(BasicSkillType::Unarmed),
                 school: "少林".to_string(),
-                curve: ProficiencyCurve {
-                    initial: 10,
-                    attenuation: 85,
-                    max_level: 170,
-                },
-                prerequisites: vec!["skill_unarmed_basic".to_string()],
+                curve: ProficiencyCurve::new(),
+                prerequisites: vec![],
                 stat_requirements: StatRequirements {
                     gen: Some(15),
                     str: Some(30),
@@ -546,12 +565,8 @@ impl EnhancedSkillManager {
                 category: SkillCategory::Special,
                 basic_type: Some(BasicSkillType::Sword),
                 school: "华山".to_string(),
-                curve: ProficiencyCurve {
-                    initial: 20,
-                    attenuation: 70,
-                    max_level: 200,
-                },
-                prerequisites: vec!["skill_unarmed_basic".to_string()],
+                curve: ProficiencyCurve::new(),
+                prerequisites: vec![],
                 stat_requirements: StatRequirements {
                     gen: Some(35),
                     str: Some(20),
@@ -600,13 +615,88 @@ impl EnhancedSkillManager {
             return Err("不满足学习条件".to_string());
         }
 
-        // 添加技能
+        // 添加技能 - 从0级开始
         learned.insert(
             skill_id.clone(),
-            PlayerSkillData::new(skill.curve.initial),
+            PlayerSkillData::new(),
         );
 
         Ok(format!("你学会了{}！", skill.name_cn))
+    }
+
+    /// Enable技能 - txpike9的enable机制
+    /// 将特殊武功映射到基础技能类型
+    /// 例如: enable_skill("unarmed", "xionghuquan")
+    /// 有效等级 = basic/2 + special
+    pub fn enable_skill(
+        &mut self,
+        player_id: &str,
+        basic_skill: &str,
+        special_skill: &str,
+    ) -> std::result::Result<String, String> {
+        // 先提取技能名称，避免借用冲突
+        let (basic_name_cn, special_name_cn) = {
+            let basic = self.get_skill(basic_skill)
+                .ok_or_else(|| format!("基础技能 {} 不存在", basic_skill))?;
+            let special = self.get_skill(special_skill)
+                .ok_or_else(|| format!("特殊技能 {} 不存在", special_skill))?;
+
+            // 检查类型
+            if basic.category != SkillCategory::Basic {
+                return Err(format!("{} 不是基础技能", basic_skill));
+            }
+            if special.category != SkillCategory::Special {
+                return Err(format!("{} 不是特殊武功", special_skill));
+            }
+
+            (basic.name_cn.clone(), special.name_cn.clone())
+        };
+
+        // 检查玩家是否学习过这两个技能
+        let learned = self.player_skills.get(player_id)
+            .ok_or_else(|| "你还没有学习这些技能".to_string())?;
+
+        if !learned.contains_key(basic_skill) {
+            return Err(format!("你还没有学习 {}", basic_name_cn));
+        }
+        if !learned.contains_key(special_skill) {
+            return Err(format!("你还没有学习 {}", special_name_cn));
+        }
+
+        // 设置enable映射
+        let enable_map = self.player_enable
+            .entry(player_id.to_string())
+            .or_insert_with(HashMap::new);
+        enable_map.insert(basic_skill.to_string(), special_skill.to_string());
+
+        Ok(format!("你将 {} 启用为 {} 的基础武功", special_name_cn, basic_name_cn))
+    }
+
+    /// 计算有效等级 - txpike9的eff_level公式
+    /// 有效等级 = basic/2 + special (如果有enable)
+    pub fn effective_level(&self, player_id: &str, basic_skill: &str) -> i32 {
+        let learned = match self.player_skills.get(player_id) {
+            Some(l) => l,
+            None => return 0,
+        };
+
+        // 检查是否有enable映射
+        let enable_map = self.player_enable.get(player_id);
+
+        let basic_level = learned.get(basic_skill)
+            .map(|s| s.level)
+            .unwrap_or(0);
+
+        if let Some(special_skill) = enable_map.and_then(|m| m.get(basic_skill)) {
+            let special_level = learned.get(special_skill)
+                .map(|s| s.level)
+                .unwrap_or(0);
+            // txpike9: return m[basic][0]/2 + m[e[basic]][0];
+            return basic_level / 2 + special_level;
+        }
+
+        // 没有enable，只返回基础技能等级的一半
+        basic_level / 2
     }
 
     /// 获取玩家技能
@@ -643,13 +733,15 @@ impl EnhancedSkillManager {
 
         // 记录使用并检查升级
         player_skill.record_use();
-        let leveled_up = player_skill.add_exp(10, &skill_info.curve);
+        let leveled_up = player_skill.add_points(10);
 
         let mut results = vec![];
         results.push(format!("你使用了{}", skill_info.name_cn));
 
         if leveled_up {
-            results.push(format!("§g你的 {} 提升到了 {} 级！§N", skill_info.name_cn, player_skill.level));
+            let percent = player_skill.proficiency_percent();
+            results.push(format!("§g你的 {} 提升到了 {} 级({}%)§N",
+                skill_info.name_cn, player_skill.level, percent));
         }
 
         Ok(results)
