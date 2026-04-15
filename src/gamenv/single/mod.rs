@@ -3,6 +3,8 @@
 
 pub mod daemons;
 pub mod skills;
+pub mod masters;
 
 pub use daemons::*;
 pub use skills::*;
+pub use masters::*;

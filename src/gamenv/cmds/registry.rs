@@ -130,6 +130,10 @@ pub async fn init_registry() -> Arc<RwLock<CommandRegistry>> {
         crate::gamenv::cmds::inventory::get_command(),
         crate::gamenv::cmds::skills::get_command(),
         crate::gamenv::cmds::skills::get_cast_command(),
+        crate::gamenv::cmds::learn::get_learn_command(),
+        crate::gamenv::cmds::learn::get_baishi_command(),
+        crate::gamenv::cmds::learn::get_enable_command(),
+        crate::gamenv::cmds::learn::get_menpai_command(),
         crate::gamenv::cmds::pk::get_command(),
         crate::gamenv::cmds::move_dir::get_command(),
     ]);
